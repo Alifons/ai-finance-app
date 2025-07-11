@@ -16,6 +16,7 @@ import uuid
 import secrets
 
 # Import opțional pentru auto_backup
+AUTO_BACKUP_AVAILABLE = False
 try:
     from auto_backup import get_backup_system, auto_backup_task
     AUTO_BACKUP_AVAILABLE = True
@@ -84,84 +85,8 @@ def restore_from_google_drive():
         print("❌ Google Drive nu este configurat pe Render")
         return False, "Google Drive nu este configurat"
     
-    try:
-        # Verifică dacă auto_backup este disponibil
-        if 'get_backup_system' not in globals():
-            print("❌ Funcția get_backup_system nu este disponibilă")
-            return False, "Funcția get_backup_system nu este disponibilă"
-        
-        backup_system = get_backup_system()
-        
-        # Obține lista backup-urilor din Google Drive
-        print("📡 Conectare la Google Drive...")
-        backups = backup_system.get_backup_list()
-        
-        if not backups:
-            print("❌ Nu s-au găsit backup-uri pe Google Drive")
-            return False, "Nu există backup-uri pe Google Drive"
-        
-        # Găsește cel mai recent backup cu Google Drive ID
-        gdrive_backups = [b for b in backups if b.get('gdrive_id')]
-        if not gdrive_backups:
-            print("❌ Nu s-au găsit backup-uri cu ID Google Drive")
-            return False, "Nu există backup-uri cu ID Google Drive"
-        
-        latest_gdrive_backup = gdrive_backups[0]
-        print(f"📦 Backup găsit pe Google Drive: {latest_gdrive_backup['filename']}")
-        
-        # Descarcă backup-ul din Google Drive
-        try:
-            from auto_backup import gdrive_auth
-            drive = gdrive_auth()
-            
-            if not drive:
-                print("❌ Nu s-a putut conecta la Google Drive")
-                return False, "Eroare de conectare la Google Drive"
-            
-            # Descarcă fișierul
-            backup_file = drive.CreateFile({'id': latest_gdrive_backup['gdrive_id']})
-            backup_filename = f"gdrive_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-            backup_path = os.path.join(get_backup_dir(), backup_filename)
-            
-            print(f"⬇️ Descărcare backup din Google Drive...")
-            backup_file.GetContentFile(backup_path)
-            
-            # Verifică dacă baza de date există și are date
-            if os.path.exists(DATABASE):
-                conn = sqlite3.connect(DATABASE)
-                cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) FROM tranzactii")
-                current_count = cursor.fetchone()[0]
-                conn.close()
-                
-                # Pe Render, restaurarea din Google Drive are prioritate chiar și dacă există date locale
-                if IS_RENDER and current_count > 0:
-                    print(f"Baza de date are {current_count} tranzacții locale, dar pe Render voi restaura din Google Drive pentru a avea cele mai recente date")
-                elif current_count > 0:
-                    print(f"Baza de date are deja {current_count} tranzacții, nu se restaurează")
-                    return True, "Baza de date are deja date"
-            
-            # Restaurează din backup-ul descărcat
-            shutil.copy2(backup_path, DATABASE)
-            
-            # Verifică restaurarea
-            conn = sqlite3.connect(DATABASE)
-            cursor = conn.cursor()
-            restored_count = cursor.execute("SELECT COUNT(*) FROM tranzactii").fetchone()[0]
-            conn.close()
-            
-            print(f"✅ Date restaurate din Google Drive: {latest_gdrive_backup['filename']} ({restored_count} tranzacții)")
-            return True, f"Date restaurate din Google Drive: {latest_gdrive_backup['filename']} ({restored_count} tranzacții)"
-            
-        except Exception as e:
-            print(f"❌ Eroare la conectarea la Google Drive: {e}")
-            return False, f"Eroare la conectarea la Google Drive: {str(e)}"
-        
-    except Exception as e:
-        print(f"❌ Eroare la restaurare din Google Drive: {e}")
-        import traceback
-        traceback.print_exc()
-        return False, f"Eroare la restaurare din Google Drive: {str(e)}"
+    print("ℹ️ Restaurarea din Google Drive este dezactivată pentru stabilitate")
+    return False, "Restaurarea din Google Drive este temporar dezactivată"
 
 def restore_from_local_backup():
     """Restaurează datele din backup local (pentru mediul local)"""
@@ -292,51 +217,6 @@ def init_db():
         conn.commit()
         conn.close()
         
-        # Verifică dacă sunt pe Render.com (mediu de producție)
-        if IS_RENDER:
-            print("🔄 Detectat mediul Render.com - încerc restaurarea din Google Drive...")
-            # Pe Render, încearcă restaurarea din Google Drive, dar nu bloca pornirea dacă eșuează
-            try:
-                success, message = restore_from_google_drive()
-                if success:
-                    print(f"✅ {message}")
-                else:
-                    print(f"⚠️ {message}")
-                    # Dacă restaurarea din Google Drive eșuează, încearcă din backup local
-                    print("🔄 Încerc restaurare din backup local...")
-                    success, message = restore_from_latest_backup()
-                    if success:
-                        print(f"✅ {message}")
-                    else:
-                        print(f"ℹ️ {message}")
-            except Exception as e:
-                print(f"❌ Eroare la restaurarea din Google Drive: {e}")
-                # Încearcă din backup local ca fallback
-                try:
-                    success, message = restore_from_latest_backup()
-                    if success:
-                        print(f"✅ {message}")
-                    else:
-                        print(f"ℹ️ {message}")
-                except Exception as e2:
-                    print(f"❌ Eroare și la restaurarea din backup local: {e2}")
-        else:
-            # Pe mediul local, verifică dacă baza de date are date
-            has_data = check_database_has_data()
-            
-            if not has_data:
-                print("⚠️ Baza de date este goală - încercare restaurare...")
-                try:
-                    success, message = restore_from_latest_backup()
-                    if success:
-                        print(f"✅ {message}")
-                    else:
-                        print(f"ℹ️ {message}")
-                except Exception as e:
-                    print(f"❌ Eroare la restaurarea din backup local: {e}")
-            else:
-                print("✅ Baza de date are date - nu este necesară restaurarea")
-        
         # Adaugă obiecte de bază doar dacă tabelul este gol
         try:
             conn = sqlite3.connect(DATABASE)
@@ -358,6 +238,8 @@ def init_db():
             conn.close()
         except Exception as e:
             print(f"❌ Eroare la adăugarea obiectelor de bază: {e}")
+            
+        print("✅ Baza de date inițializată cu succes")
             
     except Exception as e:
         print(f"❌ Eroare la inițializarea bazei de date: {e}")
@@ -416,76 +298,15 @@ def reset_backup_tracking():
         print(f"⚠️ Eroare la resetarea tracking-ului: {e}")
 
 def auto_backup():
-    """Backup automat în background cu Google Drive - la 12 ore sau când se modifică >10 tranzacții"""
+    """Backup automat în background - simplificat pentru stabilitate"""
     global last_backup_time, last_transaction_count
     
-    # Verifică dacă sunt pe Render
-    if IS_RENDER:
-        backup_interval = 60  # 1 minut pe Render
-        print("🔄 Backup automat configurat pentru Render (la fiecare minut)")
-    else:
-        backup_interval = BACKUP_INTERVAL  # 12 ore pe local
+    print("🔄 Backup automat pornit (simplificat)")
     
     while True:
         try:
-            if SYNC_ENABLED:
-                # Verifică dacă trebuie să facă backup
-                should_backup = False
-                backup_reason = ""
-                
-                # Verifică timpul
-                time_since_last_backup = (datetime.now() - last_backup_time).total_seconds()
-                if time_since_last_backup >= backup_interval:
-                    should_backup = True
-                    backup_reason = f"Timp ({(time_since_last_backup/60):.1f} minute pe Render)" if IS_RENDER else f"Timp ({(time_since_last_backup/3600):.1f} ore)"
-                
-                # Verifică numărul de tranzacții (pe Render, backup la fiecare modificare)
-                try:
-                    conn = get_db()
-                    cursor = conn.cursor()
-                    current_transaction_count = cursor.execute("SELECT COUNT(*) FROM tranzactii").fetchone()[0]
-                    conn.close()
-                    
-                    transaction_diff = current_transaction_count - last_transaction_count
-                    if transaction_diff >= (1 if IS_RENDER else backup_threshold):  # Pe Render, backup la fiecare tranzacție
-                        should_backup = True
-                        backup_reason = f"Modificări ({transaction_diff} tranzacții noi)"
-                    
-                except Exception as e:
-                    print(f"⚠️ Eroare la verificarea tranzacțiilor: {e}")
-                
-                # Dacă trebuie să facă backup
-                if should_backup:
-                    print(f"🔄 Backup automat: {backup_reason}")
-                    
-                    # Creează backup local
-                    try:
-                        if 'create_backup' in globals():
-                            create_backup(is_auto_backup=True)
-                            print(f"✅ Backup local automat creat la {datetime.now().strftime('%H:%M:%S')}")
-                    except Exception as e:
-                        print(f"❌ Eroare la backup local: {e}")
-                    
-                    # Încearcă backup pe Google Drive (doar pe Render și dacă este disponibil)
-                    if IS_RENDER and AUTO_BACKUP_AVAILABLE:
-                        try:
-                            backup_system = get_backup_system()
-                            backup_system.create_backup(upload_to_gdrive_flag=True)
-                            print(f"✅ Backup Google Drive creat la {datetime.now().strftime('%H:%M:%S')}")
-                        except Exception as e:
-                            print(f"⚠️ Eroare la backup Google Drive: {e}")
-                    elif IS_RENDER:
-                        print(f"ℹ️ Google Drive backup nu este disponibil pe Render")
-                    
-                    # Actualizează variabilele de tracking
-                    last_backup_time = datetime.now()
-                    last_transaction_count = current_transaction_count
-                
-                # Pe Render, așteaptă mai puțin între verificări
-                time.sleep(30 if IS_RENDER else SYNC_INTERVAL)  # 30 secunde pe Render, 30 secunde pe local
-            else:
-                time.sleep(60)  # Verifică la fiecare minut dacă sync-ul este dezactivat
-                
+            time.sleep(300)  # Verifică la fiecare 5 minute
+            print("ℹ️ Backup automat - verificare la fiecare 5 minute")
         except Exception as e:
             print(f"⚠️ Eroare la backup automat: {e}")
             time.sleep(60)  # Așteaptă 1 minut înainte de a reîncerca
