@@ -1376,6 +1376,12 @@ def backup():
     if 'user' not in session:
         return redirect(url_for('login'))
     
+    # Verifică dacă Google Drive este disponibil
+    if not AUTO_BACKUP_AVAILABLE:
+        return render_template('backup.html', 
+                             backups=[], 
+                             gdrive_info={'error': 'Google Drive nu este configurat. Funcționalitatea de backup Google Drive nu este disponibilă pe acest server.'})
+    
     try:
         backup_system = get_backup_system()
     except Exception as e:
@@ -1453,6 +1459,8 @@ def backup():
                     return render_template('backup.html', backups=[], gdrive_info={'error': f'Eroare la sincronizarea cu local: {str(e)}'})
             
             elif action == 'sync_gdrive':
+                if not AUTO_BACKUP_AVAILABLE:
+                    return redirect(url_for('backup', error='Google Drive nu este configurat pe acest server. Funcționalitatea de backup Google Drive nu este disponibilă.'))
                 try:
                     backup_system.sync_all_backups_to_gdrive()
                     return redirect(url_for('backup', success='Sincronizare cu Google Drive realizată cu succes!'))
