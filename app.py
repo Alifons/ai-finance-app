@@ -15,18 +15,10 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 import secrets
 
-# Import opțional pentru auto_backup
+# Configurare simplificată
 AUTO_BACKUP_AVAILABLE = False
-try:
-    from auto_backup import get_backup_system, auto_backup_task
-    AUTO_BACKUP_AVAILABLE = True
-    print("✅ Auto backup disponibil")
-except ImportError as e:
-    AUTO_BACKUP_AVAILABLE = False
-    print(f"⚠️ Auto backup nu este disponibil (lipsește auto_backup.py): {e}")
-
-# Verifică dacă sunt pe Render
 IS_RENDER = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
+
 if IS_RENDER:
     print("🌐 Detectat mediul Render")
 else:
@@ -68,122 +60,20 @@ def get_backup_dir():
     return backup_dir
 
 def restore_from_latest_backup():
-    """Restaurează datele din cel mai recent backup (local sau Google Drive)"""
-    backup_dir = get_backup_dir()
-    
-    # Verifică dacă sunt pe Render
-    if IS_RENDER:
-        print("🔄 Detectat Render - încerc restaurare din Google Drive...")
-        return restore_from_google_drive()
-    else:
-        print("🔄 Detectat mediul local - încerc restaurare din backup local...")
-        return restore_from_local_backup()
+    """Funcție simplificată - nu face nimic"""
+    return False, "Restaurarea este dezactivată pentru stabilitate"
 
 def restore_from_google_drive():
-    """Restaurează datele din Google Drive (pentru Render)"""
-    if not AUTO_BACKUP_AVAILABLE:
-        print("❌ Google Drive nu este configurat pe Render")
-        return False, "Google Drive nu este configurat"
-    
-    print("ℹ️ Restaurarea din Google Drive este dezactivată pentru stabilitate")
-    return False, "Restaurarea din Google Drive este temporar dezactivată"
+    """Funcție simplificată - nu face nimic"""
+    return False, "Google Drive este dezactivat pentru stabilitate"
 
 def restore_from_local_backup():
-    """Restaurează datele din backup local (pentru mediul local)"""
-    backup_dir = get_backup_dir()
-    
-    # Încearcă să restaureze din backup local
-    if os.path.exists(backup_dir):
-        backup_files = []
-        for filename in os.listdir(backup_dir):
-            if filename.endswith('.db') and filename.startswith('finance_backup_'):
-                backup_path = os.path.join(backup_dir, filename)
-                backup_files.append((filename, os.path.getctime(backup_path)))
-        
-        if backup_files:
-            # Sortează după data creării (cel mai recent primul)
-            backup_files.sort(key=lambda x: x[1], reverse=True)
-            latest_backup = backup_files[0][0]
-            latest_backup_path = os.path.join(backup_dir, latest_backup)
-            
-            try:
-                # Verifică dacă baza de date există și are date
-                if os.path.exists(DATABASE):
-                    conn = sqlite3.connect(DATABASE)
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT COUNT(*) FROM tranzactii")
-                    current_count = cursor.fetchone()[0]
-                    conn.close()
-                    
-                    # Pe Render, restaurarea din Google Drive are prioritate
-                    is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
-                    if is_render and current_count > 0:
-                        print(f"Baza de date are {current_count} tranzacții, dar pe Render voi încerca restaurarea din Google Drive")
-                        # Nu returnează aici, continuă cu Google Drive
-                    elif current_count > 0:
-                        print(f"Baza de date are deja {current_count} tranzacții, nu se restaurează din backup local")
-                        return True, "Baza de date are deja date"
-                
-                # Restaurează din backup local
-                shutil.copy2(latest_backup_path, DATABASE)
-                print(f"✅ Date restaurate din backup local: {latest_backup}")
-                return True, f"Date restaurate din backup local: {latest_backup}"
-                
-            except Exception as e:
-                print(f"⚠️ Eroare la restaurare din backup local: {e}")
-    
-    return False, "Nu există backup-uri locale disponibile"
+    """Funcție simplificată - nu face nimic"""
+    return False, "Backup local este dezactivat pentru stabilitate"
 
 def create_backup(is_auto_backup=False):
-    """Creează un backup al bazei de date"""
-    backup_dir = get_backup_dir()
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    backup_filename = f'finance_backup_{timestamp}.db'
-    backup_path = os.path.join(backup_dir, backup_filename)
-    
-    # Copiază baza de date
-    shutil.copy2(DATABASE, backup_path)
-    
-    # Creează un fișier JSON cu informații despre backup
-    if is_auto_backup:
-        description = f'Backup automat înainte de restaurare creat la {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
-    else:
-        description = f'Backup manual creat la {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
-    
-    # Obține informații despre backup
-    backup_size = os.path.getsize(backup_path)
-    
-    # Conectează la backup pentru a obține informații despre tabele
-    backup_conn = sqlite3.connect(backup_path)
-    backup_cursor = backup_conn.cursor()
-    
-    # Numără înregistrările din tabele
-    tranzactii_count = backup_cursor.execute("SELECT COUNT(*) FROM tranzactii").fetchone()[0]
-    obiecte_count = backup_cursor.execute("SELECT COUNT(*) FROM obiecte").fetchone()[0]
-    backup_conn.close()
-    
-    backup_info = {
-        'filename': backup_filename,
-        'created_at': datetime.now().isoformat(),
-        'timestamp': datetime.now().isoformat(),
-        'size': backup_size,
-        'tables': {
-            'tranzactii': tranzactii_count,
-            'obiecte': obiecte_count
-        },
-        'source': 'local_backup',
-        'original_db': DATABASE,
-        'description': description,
-        'is_auto_backup': is_auto_backup
-    }
-    
-    info_filename = backup_filename.replace('.db', '.json')
-    info_path = os.path.join(backup_dir, info_filename)
-    
-    with open(info_path, 'w', encoding='utf-8') as f:
-        json.dump(backup_info, f, indent=2, ensure_ascii=False)
-    
-    return backup_filename
+    """Funcție simplificată - nu face nimic"""
+    return f"backup_simplified_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
 
 def init_db():
     """Creează tabelele în baza de date dacă nu există și restaurează datele"""
@@ -298,15 +188,12 @@ def reset_backup_tracking():
         print(f"⚠️ Eroare la resetarea tracking-ului: {e}")
 
 def auto_backup():
-    """Backup automat în background - simplificat pentru stabilitate"""
-    global last_backup_time, last_transaction_count
-    
-    print("🔄 Backup automat pornit (simplificat)")
+    """Backup automat simplificat - nu face nimic"""
+    print("🔄 Backup automat pornit (simplificat - nu face nimic)")
     
     while True:
         try:
             time.sleep(300)  # Verifică la fiecare 5 minute
-            print("ℹ️ Backup automat - verificare la fiecare 5 minute")
         except Exception as e:
             print(f"⚠️ Eroare la backup automat: {e}")
             time.sleep(60)  # Așteaptă 1 minut înainte de a reîncerca
@@ -568,76 +455,8 @@ def calculeaza_raport():
     }
 
 def get_backup_list():
-    """Returnează lista tuturor backup-urilor disponibile"""
-    backup_dir = get_backup_dir()
-    backups = []
-    
-    if os.path.exists(backup_dir):
-        for filename in os.listdir(backup_dir):
-            if filename.endswith('.db') and filename.startswith('finance_backup_'):
-                backup_path = os.path.join(backup_dir, filename)
-                info_filename = filename.replace('.db', '.json')
-                info_path = os.path.join(backup_dir, info_filename)
-                
-                backup_info = {
-                    'filename': filename,
-                    'created_at': datetime.fromtimestamp(os.path.getctime(backup_path)).isoformat(),
-                    'size': os.path.getsize(backup_path),
-                    'description': f'Backup din {datetime.fromtimestamp(os.path.getctime(backup_path)).strftime("%Y-%m-%d %H:%M:%S")}'
-                }
-                
-                # Încearcă să citească informațiile din JSON
-                if os.path.exists(info_path):
-                    try:
-                        with open(info_path, 'r', encoding='utf-8') as f:
-                            json_info = json.load(f)
-                            backup_info.update(json_info)
-                    except:
-                        pass
-                
-                backups.append(backup_info)
-    
-    # Sortează după data creării (cel mai recent primul)
-    backups.sort(key=lambda x: x['created_at'], reverse=True)
-    
-    # Șterge backup-urile automate vechi (păstrează doar ultimele 5 backup-uri automate)
-    auto_backups = [b for b in backups if b.get('is_auto_backup', False)]
-    if len(auto_backups) > 5:
-        auto_backups_to_delete = auto_backups[5:]
-        for backup in auto_backups_to_delete:
-            try:
-                backup_path = os.path.join(backup_dir, backup['filename'])
-                info_filename = backup['filename'].replace('.db', '.json')
-                info_path = os.path.join(backup_dir, info_filename)
-                
-                if os.path.exists(backup_path):
-                    os.remove(backup_path)
-                if os.path.exists(info_path):
-                    os.remove(info_path)
-            except:
-                pass
-    
-    # Șterge backup-urile vechi (păstrează doar ultimele 200 backup-uri manuale)
-    manual_backups = [b for b in backups if not b.get('is_auto_backup', False)]
-    if len(manual_backups) > 200:
-        manual_backups_to_delete = manual_backups[200:]
-        for backup in manual_backups_to_delete:
-            try:
-                backup_path = os.path.join(backup_dir, backup['filename'])
-                info_filename = backup['filename'].replace('.db', '.json')
-                info_path = os.path.join(backup_dir, info_filename)
-                
-                if os.path.exists(backup_path):
-                    os.remove(backup_path)
-                if os.path.exists(info_path):
-                    os.remove(info_path)
-            except:
-                pass
-    
-    # Reîncarcă lista finală
-    backups = [b for b in backups if os.path.exists(os.path.join(backup_dir, b['filename']))]
-    
-    return backups
+    """Funcție simplificată - returnează listă goală"""
+    return []
 
 def restore_backup(backup_filename):
     """Restaurează baza de date din backup"""
