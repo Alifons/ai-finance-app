@@ -1,0 +1,14 @@
+{
+  "filename": "finance_backup_20250711_143505.db",
+  "created_at": "2025-07-11T14:35:05.092971",
+  "timestamp": "2025-07-11T14:35:05.092990",
+  "size": 20480,
+  "tables": {
+    "tranzactii": 0,
+    "obiecte": 0
+  },
+  "source": "local_backup",
+  "original_db": "finance.db",
+  "description": "Backup automat înainte de restaurare creat la 2025-07-11 14:35:05",
+  "is_auto_backup": true
+}

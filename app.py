@@ -1386,6 +1386,8 @@ def backup():
         backup_system = get_backup_system()
     except Exception as e:
         print(f"DEBUG: Eroare la inițializarea sistemului de backup: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return render_template('backup.html', 
                              backups=[], 
                              gdrive_info={'error': f'Eroare la inițializarea sistemului de backup: {str(e)}'})
@@ -1535,7 +1537,17 @@ def backup():
         return render_template('backup.html', backups=[], gdrive_info={'error': f'Exceptie generală: {str(e)}'})
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    print(f"Starting AI Finance App on port {port}")
-    print("Database will be initialized automatically")
-    socketio.run(app, debug=False, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
+    try:
+        port = int(os.environ.get('PORT', 5000))
+        print(f"Starting AI Finance App on port {port}")
+        print("Database will be initialized automatically")
+        
+        # Inițializează baza de date înainte de pornire
+        init_db()
+        print("Database initialized successfully")
+        
+        socketio.run(app, debug=False, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
+    except Exception as e:
+        print(f"Error starting application: {e}")
+        import traceback
+        traceback.print_exc()

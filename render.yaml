@@ -3,7 +3,7 @@ services:
     name: ai-finance-app
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: python app.py
     plan: free
     envVars:
       - key: PYTHON_VERSION
