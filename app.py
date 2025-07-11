@@ -1435,13 +1435,40 @@ def backup():
                 backup_filename = request.form.get('backup_file')
                 if backup_filename:
                     try:
+                        # Șterge din local
                         backup_path = backup_system.backup_dir / backup_filename
                         info_path = backup_system.backup_dir / f"{backup_filename.replace('.db', '.json')}"
+                        
+                        # Verifică dacă backup-ul există pe Google Drive și îl șterge
+                        gdrive_deleted = False
+                        if info_path.exists():
+                            with open(info_path, 'r', encoding='utf-8') as f:
+                                info = json.load(f)
+                                if info.get('gdrive_id'):
+                                    try:
+                                        from auto_backup import gdrive_auth
+                                        drive = gdrive_auth()
+                                        if drive:
+                                            file_drive = drive.CreateFile({'id': info['gdrive_id']})
+                                            file_drive.Delete()
+                                            gdrive_deleted = True
+                                            print(f"✅ Backup șters de pe Google Drive: {backup_filename}")
+                                    except Exception as e:
+                                        print(f"⚠️ Eroare la ștergerea de pe Google Drive: {e}")
+                        
+                        # Șterge fișierele locale
                         if backup_path.exists():
                             backup_path.unlink()
                         if info_path.exists():
                             info_path.unlink()
-                        return redirect(url_for('backup', success=f'Backup șters: {backup_filename}'))
+                        
+                        success_msg = f'Backup șters: {backup_filename}'
+                        if gdrive_deleted:
+                            success_msg += ' (local + Google Drive)'
+                        else:
+                            success_msg += ' (doar local)'
+                        
+                        return redirect(url_for('backup', success=success_msg))
                     except Exception as e:
                         return render_template('backup.html', backups=[], gdrive_info={'error': f'Eroare la ștergerea backup-ului: {str(e)}'})
                 else:
