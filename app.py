@@ -14,7 +14,14 @@ import requests
 from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 import secrets
-from auto_backup import get_backup_system, auto_backup_task
+
+# Import opțional pentru auto_backup
+try:
+    from auto_backup import get_backup_system, auto_backup_task
+    AUTO_BACKUP_AVAILABLE = True
+except ImportError:
+    AUTO_BACKUP_AVAILABLE = False
+    print("⚠️ Auto backup nu este disponibil (lipsește auto_backup.py)")
 
 app = Flask(__name__, static_folder='static')
 app.config['SECRET_KEY'] = 'your-secret-key-here'
@@ -86,11 +93,10 @@ def restore_from_latest_backup():
             except Exception as e:
                 print(f"⚠️ Eroare la restaurare din backup local: {e}")
     
-    # Dacă nu există backup local, încearcă din Google Drive
+    # Dacă nu există backup local, încearcă din Google Drive (doar dacă este disponibil)
     is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
-    if is_render:
+    if is_render and AUTO_BACKUP_AVAILABLE:
         try:
-            from auto_backup import get_backup_system
             backup_system = get_backup_system()
             
             # Obține lista backup-urilor din Google Drive
@@ -121,6 +127,8 @@ def restore_from_latest_backup():
                     
         except Exception as e:
             print(f"⚠️ Eroare la restaurare din Google Drive: {e}")
+    elif is_render:
+        print("ℹ️ Google Drive backup nu este disponibil pe Render")
     
     return False, "Nu există backup-uri disponibile (local sau Google Drive)"
 
@@ -273,16 +281,17 @@ def auto_backup():
                     create_backup(is_auto_backup=True)
                     print(f"Backup local automat creat la {datetime.now().strftime('%H:%M:%S')}")
                 
-                # Încearcă backup pe Google Drive (doar pe Render)
+                # Încearcă backup pe Google Drive (doar pe Render și dacă este disponibil)
                 is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
-                if is_render:
+                if is_render and AUTO_BACKUP_AVAILABLE:
                     try:
-                        from auto_backup import get_backup_system
                         backup_system = get_backup_system()
                         backup_system.create_backup(upload_to_gdrive_flag=True)
                         print(f"✅ Backup Google Drive creat la {datetime.now().strftime('%H:%M:%S')}")
                     except Exception as e:
                         print(f"⚠️ Eroare la backup Google Drive: {e}")
+                elif is_render:
+                    print(f"ℹ️ Google Drive backup nu este disponibil pe Render")
         except Exception as e:
             print(f"Eroare la backup automat: {e}")
         
