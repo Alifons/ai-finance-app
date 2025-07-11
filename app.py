@@ -62,6 +62,93 @@ def restore_from_latest_backup():
     """Restaurează datele din cel mai recent backup (local sau Google Drive)"""
     backup_dir = get_backup_dir()
     
+    # Verifică dacă sunt pe Render
+    is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
+    
+    if is_render:
+        print("🔄 Detectat Render - încerc restaurare din Google Drive...")
+        return restore_from_google_drive()
+    else:
+        print("🔄 Detectat mediul local - încerc restaurare din backup local...")
+        return restore_from_local_backup()
+
+def restore_from_google_drive():
+    """Restaurează datele din Google Drive (pentru Render)"""
+    if not AUTO_BACKUP_AVAILABLE:
+        print("❌ Google Drive nu este configurat pe Render")
+        return False, "Google Drive nu este configurat"
+    
+    try:
+        backup_system = get_backup_system()
+        
+        # Obține lista backup-urilor din Google Drive
+        print("📡 Conectare la Google Drive...")
+        backups = backup_system.get_backup_list()
+        
+        if not backups:
+            print("❌ Nu s-au găsit backup-uri pe Google Drive")
+            return False, "Nu există backup-uri pe Google Drive"
+        
+        # Găsește cel mai recent backup cu Google Drive ID
+        gdrive_backups = [b for b in backups if b.get('gdrive_id')]
+        if not gdrive_backups:
+            print("❌ Nu s-au găsit backup-uri cu ID Google Drive")
+            return False, "Nu există backup-uri cu ID Google Drive"
+        
+        latest_gdrive_backup = gdrive_backups[0]
+        print(f"📦 Backup găsit pe Google Drive: {latest_gdrive_backup['filename']}")
+        
+        # Descarcă backup-ul din Google Drive
+        from auto_backup import gdrive_auth
+        drive = gdrive_auth()
+        
+        if not drive:
+            print("❌ Nu s-a putut conecta la Google Drive")
+            return False, "Eroare de conectare la Google Drive"
+        
+        # Descarcă fișierul
+        backup_file = drive.CreateFile({'id': latest_gdrive_backup['gdrive_id']})
+        backup_filename = f"gdrive_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        backup_path = os.path.join(get_backup_dir(), backup_filename)
+        
+        print(f"⬇️ Descărcare backup din Google Drive...")
+        backup_file.GetContentFile(backup_path)
+        
+        # Verifică dacă baza de date există și are date
+        if os.path.exists(DATABASE):
+            conn = sqlite3.connect(DATABASE)
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM tranzactii")
+            current_count = cursor.fetchone()[0]
+            conn.close()
+            
+            # Dacă baza de date are deja date, nu restaura
+            if current_count > 0:
+                print(f"Baza de date are deja {current_count} tranzacții, nu se restaurează")
+                return True, "Baza de date are deja date"
+        
+        # Restaurează din backup-ul descărcat
+        shutil.copy2(backup_path, DATABASE)
+        
+        # Verifică restaurarea
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+        restored_count = cursor.execute("SELECT COUNT(*) FROM tranzactii").fetchone()[0]
+        conn.close()
+        
+        print(f"✅ Date restaurate din Google Drive: {latest_gdrive_backup['filename']} ({restored_count} tranzacții)")
+        return True, f"Date restaurate din Google Drive: {latest_gdrive_backup['filename']} ({restored_count} tranzacții)"
+        
+    except Exception as e:
+        print(f"❌ Eroare la restaurare din Google Drive: {e}")
+        import traceback
+        traceback.print_exc()
+        return False, f"Eroare la restaurare din Google Drive: {str(e)}"
+
+def restore_from_local_backup():
+    """Restaurează datele din backup local (pentru mediul local)"""
+    backup_dir = get_backup_dir()
+    
     # Încearcă să restaureze din backup local
     if os.path.exists(backup_dir):
         backup_files = []
@@ -98,44 +185,7 @@ def restore_from_latest_backup():
             except Exception as e:
                 print(f"⚠️ Eroare la restaurare din backup local: {e}")
     
-    # Dacă nu există backup local, încearcă din Google Drive (doar dacă este disponibil)
-    is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
-    if is_render and AUTO_BACKUP_AVAILABLE:
-        try:
-            backup_system = get_backup_system()
-            
-            # Obține lista backup-urilor din Google Drive
-            backups = backup_system.get_backup_list()
-            
-            if backups:
-                # Găsește cel mai recent backup cu Google Drive ID
-                gdrive_backups = [b for b in backups if b.get('gdrive_id')]
-                if gdrive_backups:
-                    latest_gdrive_backup = gdrive_backups[0]
-                    
-                    # Descarcă backup-ul din Google Drive
-                    from auto_backup import gdrive_auth
-                    drive = gdrive_auth()
-                    
-                    # Descarcă fișierul
-                    backup_file = drive.CreateFile({'id': latest_gdrive_backup['gdrive_id']})
-                    backup_filename = f"gdrive_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-                    backup_path = os.path.join(backup_dir, backup_filename)
-                    
-                    backup_file.GetContentFile(backup_path)
-                    
-                    # Restaurează din backup-ul descărcat
-                    shutil.copy2(backup_path, DATABASE)
-                    
-                    print(f"✅ Date restaurate din Google Drive: {latest_gdrive_backup['filename']}")
-                    return True, f"Date restaurate din Google Drive: {latest_gdrive_backup['filename']}"
-                    
-        except Exception as e:
-            print(f"⚠️ Eroare la restaurare din Google Drive: {e}")
-    elif is_render:
-        print("ℹ️ Google Drive backup nu este disponibil pe Render")
-    
-    return False, "Nu există backup-uri disponibile (local sau Google Drive)"
+    return False, "Nu există backup-uri locale disponibile"
 
 def create_backup(is_auto_backup=False):
     """Creează un backup al bazei de date"""
@@ -219,16 +269,31 @@ def init_db():
     conn.commit()
     conn.close()
     
-    # Verifică dacă sunt pe Render.com (mediu de producție)
-    is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
+    # Verifică dacă baza de date are date
+    has_data = check_database_has_data()
     
-    if is_render:
-        print("🔄 Detectat mediul Render.com - încerc restaurarea datelor...")
-        success, message = restore_from_latest_backup()
-        if success:
-            print(f"✅ {message}")
+    if not has_data:
+        print("⚠️ Baza de date este goală - încercare restaurare...")
+        
+        # Verifică dacă sunt pe Render.com (mediu de producție)
+        is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
+        
+        if is_render:
+            print("🔄 Detectat mediul Render.com - încerc restaurarea datelor...")
+            success, message = restore_from_latest_backup()
+            if success:
+                print(f"✅ {message}")
+            else:
+                print(f"⚠️ {message}")
         else:
-            print(f"⚠️ {message}")
+            # Încearcă restaurarea și pe mediul local
+            success, message = restore_from_latest_backup()
+            if success:
+                print(f"✅ {message}")
+            else:
+                print(f"ℹ️ {message}")
+    else:
+        print("✅ Baza de date are date - nu este necesară restaurarea")
     
     # Adaugă obiecte de bază doar dacă tabelul este gol
     conn = sqlite3.connect(DATABASE)
@@ -248,6 +313,19 @@ def init_db():
     
     conn.commit()
     conn.close()
+
+def check_database_has_data():
+    """Verifică dacă baza de date are date"""
+    try:
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM tranzactii")
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count > 0
+    except Exception as e:
+        print(f"⚠️ Eroare la verificarea bazei de date: {e}")
+        return False
 
 def get_db():
     # Inițializează baza de date dacă nu există
