@@ -276,39 +276,37 @@ def init_db():
     conn.commit()
     conn.close()
     
-    # Verifică dacă baza de date are date
-    has_data = check_database_has_data()
-    
     # Verifică dacă sunt pe Render.com (mediu de producție)
     is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
     
-    if not has_data:
-        print("⚠️ Baza de date este goală - încercare restaurare...")
-        
-        if is_render:
-            print("🔄 Detectat mediul Render.com - încerc restaurarea datelor...")
-            success, message = restore_from_google_drive()
-            if success:
-                print(f"✅ {message}")
-            else:
-                print(f"⚠️ {message}")
-        else:
-            # Încearcă restaurarea și pe mediul local
-            success, message = restore_from_latest_backup()
-            if success:
-                print(f"✅ {message}")
-            else:
-                print(f"ℹ️ {message}")
-    elif is_render:
-        # Pe Render, forțează restaurarea din Google Drive pentru a avea cele mai recente date
-        print("🔄 Pe Render - forțez restaurarea din Google Drive pentru a avea cele mai recente date...")
+    if is_render:
+        print("🔄 Detectat mediul Render.com - forțez restaurarea din Google Drive...")
+        # Pe Render, forțează întotdeauna restaurarea din Google Drive pentru a avea cele mai recente date
         success, message = restore_from_google_drive()
         if success:
             print(f"✅ {message}")
         else:
             print(f"⚠️ {message}")
+            # Dacă restaurarea din Google Drive eșuează, încearcă din backup local
+            print("🔄 Încerc restaurare din backup local...")
+            success, message = restore_from_latest_backup()
+            if success:
+                print(f"✅ {message}")
+            else:
+                print(f"ℹ️ {message}")
     else:
-        print("✅ Baza de date are date - nu este necesară restaurarea")
+        # Pe mediul local, verifică dacă baza de date are date
+        has_data = check_database_has_data()
+        
+        if not has_data:
+            print("⚠️ Baza de date este goală - încercare restaurare...")
+            success, message = restore_from_latest_backup()
+            if success:
+                print(f"✅ {message}")
+            else:
+                print(f"ℹ️ {message}")
+        else:
+            print("✅ Baza de date are date - nu este necesară restaurarea")
     
     # Adaugă obiecte de bază doar dacă tabelul este gol
     conn = sqlite3.connect(DATABASE)
@@ -385,6 +383,16 @@ def auto_backup():
     """Backup automat în background cu Google Drive - la 12 ore sau când se modifică >10 tranzacții"""
     global last_backup_time, last_transaction_count
     
+    # Verifică dacă sunt pe Render
+    is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
+    
+    # Pe Render, backup mai frecvent (la fiecare minut în loc de 12 ore)
+    if is_render:
+        backup_interval = 60  # 1 minut pe Render
+        print("🔄 Backup automat configurat pentru Render (la fiecare minut)")
+    else:
+        backup_interval = BACKUP_INTERVAL  # 12 ore pe local
+    
     while True:
         try:
             if SYNC_ENABLED:
@@ -392,13 +400,13 @@ def auto_backup():
                 should_backup = False
                 backup_reason = ""
                 
-                # Verifică timpul (12 ore)
+                # Verifică timpul
                 time_since_last_backup = (datetime.now() - last_backup_time).total_seconds()
-                if time_since_last_backup >= BACKUP_INTERVAL:
+                if time_since_last_backup >= backup_interval:
                     should_backup = True
-                    backup_reason = f"Timp ({(time_since_last_backup/3600):.1f} ore)"
+                    backup_reason = f"Timp ({(time_since_last_backup/60):.1f} minute pe Render)" if is_render else f"Timp ({(time_since_last_backup/3600):.1f} ore)"
                 
-                # Verifică numărul de tranzacții
+                # Verifică numărul de tranzacții (pe Render, backup la fiecare modificare)
                 try:
                     conn = get_db()
                     cursor = conn.cursor()
@@ -406,7 +414,7 @@ def auto_backup():
                     conn.close()
                     
                     transaction_diff = current_transaction_count - last_transaction_count
-                    if transaction_diff >= backup_threshold:
+                    if transaction_diff >= (1 if is_render else backup_threshold):  # Pe Render, backup la fiecare tranzacție
                         should_backup = True
                         backup_reason = f"Modificări ({transaction_diff} tranzacții noi)"
                     
@@ -423,7 +431,6 @@ def auto_backup():
                         print(f"✅ Backup local automat creat la {datetime.now().strftime('%H:%M:%S')}")
                     
                     # Încearcă backup pe Google Drive (doar pe Render și dacă este disponibil)
-                    is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
                     if is_render and AUTO_BACKUP_AVAILABLE:
                         try:
                             backup_system = get_backup_system()
@@ -437,14 +444,15 @@ def auto_backup():
                     # Actualizează variabilele de tracking
                     last_backup_time = datetime.now()
                     last_transaction_count = current_transaction_count
-                    
-                    print(f"📊 Backup completat. Următorul backup: la 12 ore sau la {backup_threshold} tranzacții noi")
+                
+                # Pe Render, așteaptă mai puțin între verificări
+                time.sleep(30 if is_render else SYNC_INTERVAL)  # 30 secunde pe Render, 30 secunde pe local
+            else:
+                time.sleep(60)  # Verifică la fiecare minut dacă sync-ul este dezactivat
                 
         except Exception as e:
-            print(f"Eroare la backup automat: {e}")
-        
-        # Așteaptă 5 minute înainte de următoarea verificare
-        time.sleep(300)  # 5 minute
+            print(f"⚠️ Eroare la backup automat: {e}")
+            time.sleep(60)  # Așteaptă 1 minut înainte de a reîncerca
 
 def sync_data():
     """Sincronizare automată în background"""
