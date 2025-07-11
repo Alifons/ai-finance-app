@@ -341,8 +341,7 @@ def check_database_has_data():
         return False
 
 def get_db():
-    # Inițializează baza de date dacă nu există
-    init_db()
+    # Conectează la baza de date fără să inițializeze din nou
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     return conn
