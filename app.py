@@ -122,8 +122,11 @@ def restore_from_google_drive():
             current_count = cursor.fetchone()[0]
             conn.close()
             
-            # Dacă baza de date are deja date, nu restaura
-            if current_count > 0:
+            # Pe Render, restaurarea din Google Drive are prioritate chiar și dacă există date locale
+            is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
+            if is_render and current_count > 0:
+                print(f"Baza de date are {current_count} tranzacții locale, dar pe Render voi restaura din Google Drive pentru a avea cele mai recente date")
+            elif current_count > 0:
                 print(f"Baza de date are deja {current_count} tranzacții, nu se restaurează")
                 return True, "Baza de date are deja date"
         
@@ -172,9 +175,13 @@ def restore_from_local_backup():
                     current_count = cursor.fetchone()[0]
                     conn.close()
                     
-                    # Dacă baza de date are deja date, nu restaura
-                    if current_count > 0:
-                        print(f"Baza de date are deja {current_count} tranzacții, nu se restaurează")
+                    # Pe Render, restaurarea din Google Drive are prioritate
+                    is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
+                    if is_render and current_count > 0:
+                        print(f"Baza de date are {current_count} tranzacții, dar pe Render voi încerca restaurarea din Google Drive")
+                        # Nu returnează aici, continuă cu Google Drive
+                    elif current_count > 0:
+                        print(f"Baza de date are deja {current_count} tranzacții, nu se restaurează din backup local")
                         return True, "Baza de date are deja date"
                 
                 # Restaurează din backup local
@@ -272,15 +279,15 @@ def init_db():
     # Verifică dacă baza de date are date
     has_data = check_database_has_data()
     
+    # Verifică dacă sunt pe Render.com (mediu de producție)
+    is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
+    
     if not has_data:
         print("⚠️ Baza de date este goală - încercare restaurare...")
         
-        # Verifică dacă sunt pe Render.com (mediu de producție)
-        is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
-        
         if is_render:
             print("🔄 Detectat mediul Render.com - încerc restaurarea datelor...")
-            success, message = restore_from_latest_backup()
+            success, message = restore_from_google_drive()
             if success:
                 print(f"✅ {message}")
             else:
@@ -292,6 +299,14 @@ def init_db():
                 print(f"✅ {message}")
             else:
                 print(f"ℹ️ {message}")
+    elif is_render:
+        # Pe Render, forțează restaurarea din Google Drive pentru a avea cele mai recente date
+        print("🔄 Pe Render - forțez restaurarea din Google Drive pentru a avea cele mai recente date...")
+        success, message = restore_from_google_drive()
+        if success:
+            print(f"✅ {message}")
+        else:
+            print(f"⚠️ {message}")
     else:
         print("✅ Baza de date are date - nu este necesară restaurarea")
     
