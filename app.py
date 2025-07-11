@@ -219,16 +219,31 @@ def init_db():
     conn.commit()
     conn.close()
     
-    # Verifică dacă sunt pe Render.com (mediu de producție)
-    is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
+    # Verifică dacă baza de date are date
+    has_data = check_database_has_data()
     
-    if is_render:
-        print("🔄 Detectat mediul Render.com - încerc restaurarea datelor...")
-        success, message = restore_from_latest_backup()
-        if success:
-            print(f"✅ {message}")
+    if not has_data:
+        print("⚠️ Baza de date este goală - încercare restaurare...")
+        
+        # Verifică dacă sunt pe Render.com (mediu de producție)
+        is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
+        
+        if is_render:
+            print("🔄 Detectat mediul Render.com - încerc restaurarea datelor...")
+            success, message = restore_from_latest_backup()
+            if success:
+                print(f"✅ {message}")
+            else:
+                print(f"⚠️ {message}")
         else:
-            print(f"⚠️ {message}")
+            # Încearcă restaurarea și pe mediul local
+            success, message = restore_from_latest_backup()
+            if success:
+                print(f"✅ {message}")
+            else:
+                print(f"ℹ️ {message}")
+    else:
+        print("✅ Baza de date are date - nu este necesară restaurarea")
     
     # Adaugă obiecte de bază doar dacă tabelul este gol
     conn = sqlite3.connect(DATABASE)
@@ -248,6 +263,19 @@ def init_db():
     
     conn.commit()
     conn.close()
+
+def check_database_has_data():
+    """Verifică dacă baza de date are date"""
+    try:
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM tranzactii")
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count > 0
+    except Exception as e:
+        print(f"⚠️ Eroare la verificarea bazei de date: {e}")
+        return False
 
 def get_db():
     # Inițializează baza de date dacă nu există
