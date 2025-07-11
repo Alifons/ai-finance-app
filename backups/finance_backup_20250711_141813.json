@@ -1,0 +1,11 @@
+{
+  "timestamp": "2025-07-11T14:18:13.943083",
+  "filename": "finance_backup_20250711_141813.db",
+  "size": 20480,
+  "tables": {
+    "tranzactii": 0,
+    "obiecte": 0
+  },
+  "source": "local_and_gdrive",
+  "gdrive_id": "1k_87fYbXyukZxcCM-W-LFDRzs1jq8kgF"
+}
