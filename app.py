@@ -43,8 +43,13 @@ DATABASE = 'finance.db'
 
 # Configurare pentru sincronizare
 SYNC_INTERVAL = 30  # secunde
-BACKUP_INTERVAL = 300  # secunde (5 minute)
+BACKUP_INTERVAL = 43200  # secunde (12 ore)
 SYNC_ENABLED = True  # Activat pentru persistență
+
+# Variabile pentru tracking backup-ului bazat pe modificări
+last_backup_time = datetime.now()
+last_transaction_count = 0
+backup_threshold = 10  # Numărul de tranzacții pentru backup forțat
 
 def get_backup_dir():
     """Creează și returnează directorul pentru backup-uri"""
@@ -271,36 +276,82 @@ def get_db_hash():
     # Calculează hash-ul
     return hashlib.md5(data_string.encode()).hexdigest()
 
+def reset_backup_tracking():
+    """Resetează tracking-ul pentru backup-ul automat"""
+    global last_transaction_count
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        last_transaction_count = cursor.execute("SELECT COUNT(*) FROM tranzactii").fetchone()[0]
+        conn.close()
+        print(f"📊 Tracking backup resetat: {last_transaction_count} tranzacții")
+    except Exception as e:
+        print(f"⚠️ Eroare la resetarea tracking-ului: {e}")
+
 def auto_backup():
-    """Backup automat în background cu Google Drive"""
+    """Backup automat în background cu Google Drive - la 12 ore sau când se modifică >10 tranzacții"""
+    global last_backup_time, last_transaction_count
+    
     while True:
         try:
             if SYNC_ENABLED:
-                # Creează backup local
-                if 'create_backup' in globals():
-                    create_backup(is_auto_backup=True)
-                    print(f"Backup local automat creat la {datetime.now().strftime('%H:%M:%S')}")
+                # Verifică dacă trebuie să facă backup
+                should_backup = False
+                backup_reason = ""
                 
-                # Încearcă backup pe Google Drive (doar pe Render și dacă este disponibil)
-                is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
-                if is_render and AUTO_BACKUP_AVAILABLE:
-                    try:
-                        backup_system = get_backup_system()
-                        backup_system.create_backup(upload_to_gdrive_flag=True)
-                        print(f"✅ Backup Google Drive creat la {datetime.now().strftime('%H:%M:%S')}")
-                    except Exception as e:
-                        print(f"⚠️ Eroare la backup Google Drive: {e}")
-                elif is_render:
-                    print(f"ℹ️ Google Drive backup nu este disponibil pe Render")
+                # Verifică timpul (12 ore)
+                time_since_last_backup = (datetime.now() - last_backup_time).total_seconds()
+                if time_since_last_backup >= BACKUP_INTERVAL:
+                    should_backup = True
+                    backup_reason = f"Timp ({(time_since_last_backup/3600):.1f} ore)"
+                
+                # Verifică numărul de tranzacții
+                try:
+                    conn = get_db()
+                    cursor = conn.cursor()
+                    current_transaction_count = cursor.execute("SELECT COUNT(*) FROM tranzactii").fetchone()[0]
+                    conn.close()
+                    
+                    transaction_diff = current_transaction_count - last_transaction_count
+                    if transaction_diff >= backup_threshold:
+                        should_backup = True
+                        backup_reason = f"Modificări ({transaction_diff} tranzacții noi)"
+                    
+                except Exception as e:
+                    print(f"⚠️ Eroare la verificarea tranzacțiilor: {e}")
+                
+                # Dacă trebuie să facă backup
+                if should_backup:
+                    print(f"🔄 Backup automat: {backup_reason}")
+                    
+                    # Creează backup local
+                    if 'create_backup' in globals():
+                        create_backup(is_auto_backup=True)
+                        print(f"✅ Backup local automat creat la {datetime.now().strftime('%H:%M:%S')}")
+                    
+                    # Încearcă backup pe Google Drive (doar pe Render și dacă este disponibil)
+                    is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
+                    if is_render and AUTO_BACKUP_AVAILABLE:
+                        try:
+                            backup_system = get_backup_system()
+                            backup_system.create_backup(upload_to_gdrive_flag=True)
+                            print(f"✅ Backup Google Drive creat la {datetime.now().strftime('%H:%M:%S')}")
+                        except Exception as e:
+                            print(f"⚠️ Eroare la backup Google Drive: {e}")
+                    elif is_render:
+                        print(f"ℹ️ Google Drive backup nu este disponibil pe Render")
+                    
+                    # Actualizează variabilele de tracking
+                    last_backup_time = datetime.now()
+                    last_transaction_count = current_transaction_count
+                    
+                    print(f"📊 Backup completat. Următorul backup: la 12 ore sau la {backup_threshold} tranzacții noi")
+                
         except Exception as e:
             print(f"Eroare la backup automat: {e}")
         
-        # Backup mai frecvent pe Render pentru a evita pierderea datelor
-        is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
-        if is_render:
-            time.sleep(60)  # Backup la fiecare minut pe Render
-        else:
-            time.sleep(BACKUP_INTERVAL)  # Backup la 5 minute local
+        # Așteaptă 5 minute înainte de următoarea verificare
+        time.sleep(300)  # 5 minute
 
 def sync_data():
     """Sincronizare automată în background"""
@@ -1545,6 +1596,9 @@ if __name__ == '__main__':
         # Inițializează baza de date înainte de pornire
         init_db()
         print("Database initialized successfully")
+        
+        # Resetează tracking-ul pentru backup automat
+        reset_backup_tracking()
         
         socketio.run(app, debug=False, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
     except Exception as e:

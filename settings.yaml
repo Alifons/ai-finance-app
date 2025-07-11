@@ -9,7 +9,8 @@ google_drive:
 # Configurare backup
 backup:
   local_dir: "backups"
-  auto_backup_interval: 60  # secunde
+  auto_backup_interval: 43200  # secunde (12 ore)
+  backup_threshold: 10  # numărul de tranzacții pentru backup forțat
   max_backups: 50
   upload_to_gdrive: true
 
