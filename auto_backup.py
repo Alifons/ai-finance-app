@@ -232,8 +232,33 @@ def auto_backup_task():
     print(f"Backup automat creat la {datetime.now().strftime('%H:%M:%S')}")
 
 def gdrive_auth():
-    """Autentificare Google Drive (salvează token local)"""
+    """Autentificare Google Drive cu suport pentru Render"""
     gauth = GoogleAuth()
+    
+    # Pentru Render, citește din variabilele de mediu
+    is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
+    
+    if is_render:
+        try:
+            # Încearcă să citească din variabilele de mediu
+            client_secrets_str = os.environ.get('GDRIVE_CLIENT_SECRETS')
+            token_str = os.environ.get('GDRIVE_TOKEN')
+            
+            if client_secrets_str and token_str:
+                # Salvează temporar fișierele
+                with open('client_secrets.json', 'w') as f:
+                    f.write(client_secrets_str)
+                
+                with open('gdrive_token.json', 'w') as f:
+                    f.write(token_str)
+                
+                print("✅ Credentials încărcate din variabilele de mediu Render")
+            else:
+                print("⚠️ Nu sunt configurate variabilele de mediu pentru Google Drive pe Render")
+                return None
+        except Exception as e:
+            print(f"❌ Eroare la încărcarea credentials din Render: {e}")
+            return None
     
     # Configurează setările pentru refresh token
     gauth.settings['access_type'] = 'offline'
@@ -246,6 +271,10 @@ def gdrive_auth():
         pass
     
     if gauth.credentials is None:
+        if is_render:
+            print("❌ Nu s-au putut încărca credentials pentru Render")
+            return None
+        
         # Prima dată: va deschide browserul pentru autentificare
         print("Se deschide browserul pentru autentificare Google...")
         gauth.LocalWebserverAuth()
