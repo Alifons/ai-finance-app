@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Dashboard Financiar</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#007bff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AI Finance">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="AI Finance">
+    <meta name="msapplication-TileColor" content="#007bff">
+    <meta name="msapplication-TileImage" content="/static/icon-144.png">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/icon-16.png">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .valerian { color: #ffc107; font-weight: bold; }  /* Galben */
+        .victor { color: #198754; font-weight: bold; }    /* Verde */
+        .card { box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .form-inline { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+    </style>
+</head>
+<body class="container py-4">
+    <div class="d-flex justify-content-end align-items-center mb-3">
+        <div class="d-flex gap-2">
+            <button id="install-button" onclick="installPWA()" class="btn btn-success" style="display: none;">
+                📱 Instalează aplicația
+            </button>
+            <a href="/" class="btn btn-outline-primary">🏠 Pagina principală</a>
+            <a href="/logout" class="btn btn-outline-danger">🔄 Schimbă utilizatorul</a>
+        </div>
+    </div>
+    <h2 class="mb-4">Bun venit, <span class="{{ user }}">{{ user }}</span></h2>
+    
+    {% if error %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    {% if success %}
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        {{ success }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- FORMULAR FILTRARE -->
+    <!-- Formularul de filtrare a fost eliminat la cererea utilizatorului -->
+
+    <!-- FORMULAR ADAUGARE -->
+    <form method="post" class="form-inline" autocomplete="off" id="add-transaction-form">
+        <input name="suma" class="form-control" placeholder="Sumă" required>
+        <input name="comentariu" class="form-control" placeholder="Comentariu" id="comentariu-input" required>
+        <input type="hidden" name="csrf_token" value="{{ session.get('csrf_token', '') }}">
+        <div id="autocomplete-list" class="list-group position-absolute" style="z-index:1000;"></div>
+        <button type="submit" class="btn btn-primary" id="submit-btn">Adaugă</button>
+    </form>
+
+    <script>
+        // Previne resubmit-ul formularului
+        document.getElementById('add-transaction-form').addEventListener('submit', function(e) {
+            const submitBtn = document.getElementById('submit-btn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Se adaugă...';
+            
+            // Previne trimiterea multiplă
+            setTimeout(() => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Adaugă';
+            }, 3000);
+        });
+    </script>
+
+    <!-- DEBUG VIZUAL -->
+    {% if debug_info and debug_info.lista_obiecte %}
+    <div class="alert alert-warning mt-3">
+        <b>DEBUG:</b><br>
+        Obiecte în DB: {{ debug_info.lista_obiecte }}<br>
+        Obiecte normalizate: {{ debug_info.lista_obiecte_norm }}<br>
+        Comentariu introdus: {{ debug_info.comentariu }}<br>
+        Comentariu normalizat: {{ debug_info.comentariu_norm }}<br>
+        Obiect detectat: <b>{{ debug_info.obiect_detectat }}</b>
+    </div>
+    {% endif %}
+
+    <!-- RAPORT GENERAL -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card text-white bg-success mb-3">
+                <div class="card-header">Total Venituri</div>
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <a href="/venituri" class="text-white text-decoration-underline" style="cursor:pointer;">{{ raport.total_venituri | round(2) }} lei</a>
+                    </h5>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card p-3 text-white bg-danger">
+                <h5>Total cheltuieli</h5>
+                <p class="fs-4">{{ raport.total_cheltuieli }} lei</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card p-3 text-white bg-dark">
+                <h5>Balanță</h5>
+                <p class="fs-4">{{ raport.balanta }} lei</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- OPERATORI -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card p-3">
+                <h5>Venituri pe operator</h5>
+                <ul class="list-group list-group-flush">
+                    {% for v in raport.venituri_pe_operator %}
+                        <li class="list-group-item">
+                            <a href="/venituri/{{ v['operator'] }}" class="{{ v['operator'] }} text-decoration-underline">{{ v['operator'] }}</a>: {{ v['SUM(suma)'] | round(2) }} lei
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card p-3">
+                <h5>Cheltuieli pe operator</h5>
+                <ul class="list-group list-group-flush">
+                    {% for c in raport.cheltuieli_pe_operator %}
+                        <li class="list-group-item">
+                            <span class="{{ c['operator'] }}">{{ c['operator'] }}:</span> {{ c['SUM(suma)'] | round(2) }} lei
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card p-3">
+                <h5>Sold pe operator</h5>
+                <ul class="list-group list-group-flush">
+                    {% for op, sold in raport.sold_pe_operator.items() %}
+                        <li class="list-group-item">
+                            <span class="{{ op }}">{{ op }}:</span> {{ sold }} lei
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- TRANZACȚII -->
+    <h4>Tranzacții recente (ultimele 15)</h4>
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped">
+            <thead class="table-dark">
+                <tr>
+                    <th>Data</th>
+                    <th>Suma</th>
+                    <th>Comentariu</th>
+                    <th>Operator</th>
+                    <th>Tip</th>
+                    <th>Obiect</th>
+                    <th>Persoană</th>
+                    <th>Categorie</th>
+                    <th>Acțiuni</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in tranzactii %}
+                <tr>
+                    <td>{{ row['data'] }}</td>
+                    <td class="{% if row['tip'] == 'cheltuiala' %}text-danger{% elif row['tip'] == 'venit' %}text-primary{% endif %}">{{ row['suma'] }}</td>
+                    <td>{{ row['comentariu'] }}</td>
+                    <td><span class="{{ row['operator'] }}">{{ row['operator'] }}</span></td>
+                    <td>{{ row['tip'] }}</td>
+                    <td>{{ row['obiect'] }}</td>
+                    <td>{{ row['persoana'] }}</td>
+                    <td>{{ row['categorie'] }}</td>
+                    <td>
+                        {% if row['operator'] == user %}
+                            <form action="/sterge/{{ row['id'] }}" method="post" style="display:inline;" onsubmit="return confirm('Ștergi această tranzacție?')">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">🗑️</button>
+                            </form>
+                            <a href="/editare/{{ row['id'] }}" class="btn btn-sm btn-outline-primary" style="display:inline;">✏️</a>
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Paginare -->
+        {% if total_pagini is defined and total_pagini > 1 %}
+        <nav aria-label="Navigare pagini">
+            <ul class="pagination justify-content-center">
+                <!-- Butonul Pagina Anterioară -->
+                <li class="page-item {% if pagina_curenta == 1 %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('index', page=pagina_curenta - 1) }}">Anterior</a>
+                </li>
+
+                <!-- Linkurile către pagini -->
+                {% for page_num in range(1, total_pagini + 1) %}
+                    {% if page_num == pagina_curenta %}
+                        <li class="page-item active"><a class="page-link" href="#">{{ page_num }}</a></li>
+                    {% else %}
+                        <li class="page-item"><a class="page-link" href="{{ url_for('index', page=page_num) }}">{{ page_num }}</a></li>
+                    {% endif %}
+                {% endfor %}
+
+                <!-- Butonul Pagina Următoare -->
+                <li class="page-item {% if pagina_curenta == total_pagini %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('index', page=pagina_curenta + 1) }}">Următor</a>
+                </li>
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+
+    <!-- MENIU -->
+    <div class="mt-4">
+        <a href="/obiecte" class="btn btn-outline-secondary">📋 Obiecte</a>
+        <a href="/transfer" class="btn btn-outline-success">💸 Transfer operatori</a>
+        <a href="/agent" class="btn btn-outline-info">🤖 Agent IA</a>
+        <a href="/istoric" class="btn btn-outline-dark">🕓 Istoric complet</a>
+        <a href="/backup" class="btn btn-outline-warning">💾 Backup & Restore</a>
+        <a href="/logout" class="btn btn-outline-danger">🔓 Logout</a>
+    </div>
+
+    <!-- BUTON DE EXPORT -->
+    <div class="mb-2 dropdown d-inline-block">
+        <button class="btn btn-outline-success dropdown-toggle" type="button" id="exportDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+            Export
+        </button>
+        <ul class="dropdown-menu" aria-labelledby="exportDropdown">
+            <li><a class="dropdown-item" href="/export/csv?{{ request.query_string.decode('utf-8') }}">Export CSV</a></li>
+            <li><a class="dropdown-item" href="/export/excel?{{ request.query_string.decode('utf-8') }}">Export Excel</a></li>
+            <li><a class="dropdown-item" href="/export/pdf?{{ request.query_string.decode('utf-8') }}">Export PDF</a></li>
+        </ul>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Socket.IO pentru sincronizare în timp real -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    
+    <!-- Service Worker pentru PWA -->
+    <script>
+        let deferredPrompt;
+        
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/static/sw.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registered: ', registration);
+                    })
+                    .catch(registrationError => {
+                        console.log('ServiceWorker registration failed: ', registrationError);
+                    });
+            });
+        }
+        
+        // Detectează când aplicația poate fi instalată
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            
+            // Afișează butonul de instalare
+            const installButton = document.getElementById('install-button');
+            if (installButton) {
+                installButton.style.display = 'block';
+            }
+        });
+        
+        // Funcție pentru instalarea PWA
+        function installPWA() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('PWA instalată cu succes!');
+                    }
+                    deferredPrompt = null;
+                });
+            }
+        }
+    </script>
+    
+    <script>
+        // Conectare la WebSocket
+        const socket = io();
+        let lastSyncTime = null;
+        
+        // Conectare la server
+        socket.on('connect', function() {
+            console.log('Conectat la server pentru sincronizare');
+            // Solicită sincronizarea inițială
+            socket.emit('request_sync');
+        });
+        
+        // Primește notificări despre modificări
+        socket.on('data_changed', function(data) {
+            console.log('Date modificate de alt operator:', data);
+            showSyncNotification('Date actualizate de alt operator!');
+            // Nu reîncarcă automat pentru a preveni probleme
+            // setTimeout(() => {
+            //     location.reload();
+            // }, 2000);
+        });
+        
+        // Primește date sincronizate
+        socket.on('sync_data', function(data) {
+            console.log('Date sincronizate:', data);
+            lastSyncTime = data.timestamp;
+        });
+        
+        // Eroare la sincronizare
+        socket.on('sync_error', function(data) {
+            console.error('Eroare la sincronizare:', data.error);
+            showSyncNotification('Eroare la sincronizare!', 'error');
+        });
+        
+        // Funcție pentru afișarea notificărilor de sincronizare
+        function showSyncNotification(message, type = 'info') {
+            const alertClass = type === 'error' ? 'alert-danger' : 'alert-info';
+            const notification = `
+                <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+                    <i class="fas fa-sync-alt"></i> ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+            
+            // Adaugă notificarea la începutul paginii
+            const container = document.querySelector('.container');
+            container.insertAdjacentHTML('afterbegin', notification);
+            
+            // Elimină notificarea după 5 secunde
+            setTimeout(() => {
+                const alerts = document.querySelectorAll('.alert');
+                if (alerts.length > 0) {
+                    alerts[0].remove();
+                }
+            }, 5000);
+        }
+        
+        // Verifică conexiunea la internet
+        function checkOnlineStatus() {
+            if (!navigator.onLine) {
+                showSyncNotification('Nu ai conexiune la internet. Modificările vor fi sincronizate când te reconectezi.', 'warning');
+            }
+        }
+        
+        // Event listeners pentru status online/offline
+        window.addEventListener('online', function() {
+            showSyncNotification('Conexiune restabilită! Sincronizare în curs...');
+            socket.emit('request_sync');
+        });
+        
+        window.addEventListener('offline', function() {
+            showSyncNotification('Conexiune pierdută. Funcționezi în mod offline.', 'warning');
+        });
+        
+        // Verifică statusul la încărcarea paginii
+        checkOnlineStatus();
+        
+        // Verifică periodic statusul
+        setInterval(checkOnlineStatus, 30000); // La fiecare 30 secunde
+    </script>
+
+    <!-- AUTOCMPLETE -->
+    <script>
+    const input = document.getElementById('comentariu-input');
+    const list = document.getElementById('autocomplete-list');
+    if(input) {
+        input.addEventListener('input', function() {
+            const q = this.value;
+            if(q.length < 1) { list.innerHTML = ''; return; }
+            fetch(`/autocomplete?q=${encodeURIComponent(q)}`)
+                .then(r => r.json())
+                .then(data => {
+                    list.innerHTML = '';
+                    data.forEach(item => {
+                        const el = document.createElement('a');
+                        el.className = 'list-group-item list-group-item-action';
+                        el.textContent = item;
+                        el.onclick = () => { input.value = item; list.innerHTML = ''; };
+                        list.appendChild(el);
+                    });
+                });
+        });
+        document.addEventListener('click', function(e) {
+            if(e.target !== input) list.innerHTML = '';
+        });
+    }
+    </script>
+</body>
+</html>
+

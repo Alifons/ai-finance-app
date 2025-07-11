@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <title>Lista Venituri</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <a href="/" class="btn btn-outline-secondary">⬅ Înapoi</a>
+        {% if operator %}
+            <h2>Venituri pentru operatorul: <span class="{{ operator }}">{{ operator }}</span></h2>
+        {% else %}
+            <h2>Lista tuturor veniturilor</h2>
+        {% endif %}
+        {% if operator %}
+            <a href="/venituri" class="btn btn-outline-primary">Toate veniturile</a>
+        {% else %}
+            <span></span>
+        {% endif %}
+    </div>
+    <div class="mb-3">
+        <strong>Total venituri{% if operator %} pentru {{ operator }}{% endif %}:</strong> <span class="text-success">{{ suma_totala | round(2) }} lei</span>
+    </div>
+    {% if operator %}
+        <!-- Afișare pentru un operator specific -->
+        <div class="card">
+            <div class="card-header bg-success text-white">Venituri pentru {{ operator }}</div>
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped mb-0">
+                    <thead class="table-success">
+                        <tr>
+                            <th>Data</th>
+                            <th>Suma</th>
+                            <th>Comentariu</th>
+                            <th>Operator</th>
+                            <th>Obiect</th>
+                            <th>Persoană</th>
+                            <th>Categorie</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in venituri %}
+                        <tr>
+                            <td>{{ row['data'] }}</td>
+                            <td>{{ row['suma'] }}</td>
+                            <td>{{ row['comentariu'] }}</td>
+                            <td>{{ row['operator'] }}</td>
+                            <td>{{ row['obiect'] }}</td>
+                            <td>{{ row['persoana'] }}</td>
+                            <td>{{ row['categorie'] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% else %}
+        <!-- Afișare pentru toate veniturile grupate pe operatori -->
+        {% for operator, venituri_operator in venituri_pe_operator.items() %}
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Venituri pentru operatorul: <strong>{{ operator }}</strong></h5>
+                <span class="badge bg-light text-dark">
+                    Total: {{ venituri_operator | sum(attribute='suma') | round(2) }} lei
+                </span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped mb-0">
+                    <thead class="table-success">
+                        <tr>
+                            <th>Data</th>
+                            <th>Suma</th>
+                            <th>Comentariu</th>
+                            <th>Operator</th>
+                            <th>Obiect</th>
+                            <th>Persoană</th>
+                            <th>Categorie</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in venituri_operator %}
+                        <tr>
+                            <td>{{ row['data'] }}</td>
+                            <td>{{ row['suma'] }}</td>
+                            <td>{{ row['comentariu'] }}</td>
+                            <td>{{ row['operator'] }}</td>
+                            <td>{{ row['obiect'] }}</td>
+                            <td>{{ row['persoana'] }}</td>
+                            <td>{{ row['categorie'] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    {% endif %}
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 

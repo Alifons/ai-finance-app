@@ -1,0 +1,10 @@
+{
+  "timestamp": "2025-07-11T11:57:07.307468",
+  "filename": "finance_backup_20250711_115707.db",
+  "size": 20480,
+  "tables": {
+    "tranzactii": 4,
+    "obiecte": 5
+  },
+  "source": "local_backup"
+}

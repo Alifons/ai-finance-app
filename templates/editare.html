@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <title>Editare tranzacție</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="container py-4">
+    <h2>Editare tranzacție</h2>
+
+    <form method="post" class="row g-3 mt-3">
+        {% if pagina %}
+            <input type="hidden" name="page" value="{{ pagina }}">
+        {% endif %}
+        <div class="col-md-6">
+            <label for="suma" class="form-label">Sumă</label>
+            <input name="suma" class="form-control" value="{{ tranzactie['suma'] }}">
+        </div>
+        <div class="col-md-6">
+            <label for="comentariu" class="form-label">Comentariu</label>
+            <input name="comentariu" class="form-control" value="{{ tranzactie['comentariu'] }}">
+        </div>
+        <div class="col-12">
+            <button type="submit" class="btn btn-primary">💾 Salvează modificările</button>
+            {% if pagina %}
+                <a href="/istoric?page={{ pagina }}" class="btn btn-secondary">⬅ Înapoi la istoric</a>
+            {% else %}
+                <a href="/" class="btn btn-secondary">⬅ Înapoi</a>
+            {% endif %}
+        </div>
+    </form>
+</body>
+</html>

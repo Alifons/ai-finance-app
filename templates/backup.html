@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <title>Backup și Restore</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <a href="/" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Înapoi
+        </a>
+        <h2><i class="fas fa-database"></i> Backup și Restore</h2>
+        <span></span>
+    </div>
+
+    <!-- Mesaje de succes/eroare -->
+    {% if request.args.get('success') %}
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="fas fa-check-circle"></i> {{ request.args.get('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    {% if request.args.get('error') %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="fas fa-exclamation-triangle"></i> {{ request.args.get('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- Secțiunea pentru crearea backup-ului -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="fas fa-save"></i> Creează Backup</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Creează o copie de siguranță a tuturor datelor din aplicație.</p>
+            <form method="POST" style="display: inline;">
+                <input type="hidden" name="action" value="create">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-download"></i> Creează Backup
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Secțiunea pentru sincronizare cu Google Drive -->
+    <div class="card mb-4">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0"><i class="fas fa-cloud"></i> Sincronizare cu Google Drive</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Sincronizează toate backup-urile locale cu Google Drive pentru siguranță suplimentară.</p>
+            <form method="POST" style="display: inline;">
+                <input type="hidden" name="action" value="sync_gdrive">
+                <button type="submit" class="btn btn-info">
+                    <i class="fas fa-cloud-upload-alt"></i> Sincronizează cu Google Drive
+                </button>
+            </form>
+            <small class="text-muted d-block mt-2">
+                <i class="fas fa-info-circle"></i> 
+                Backup-urile sunt salvate în folderul "AI Finance App Backups" pe Google Drive
+            </small>
+        </div>
+    </div>
+
+    <!-- Secțiunea pentru sincronizare cu baza locală -->
+    <div class="card mb-4">
+        <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0"><i class="fas fa-sync"></i> Sincronizare cu Baza Locală</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Sincronizează datele cu baza de date de pe calculatorul tău local.</p>
+            <form method="POST" style="display: inline;">
+                <input type="hidden" name="action" value="sync_local">
+                <input type="hidden" name="local_db_path" value="C:/Users/user/Desktop/Manus/ai_finance_app/finance.db">
+                <button type="submit" class="btn btn-warning" onclick="return confirm('Sincronizezi cu baza locală? Aceasta va suprascrie datele de pe server cu cele de pe calculatorul tău.')">
+                    <i class="fas fa-sync"></i> Sincronizează cu Local
+                </button>
+            </form>
+            <small class="text-muted d-block mt-2">
+                <i class="fas fa-info-circle"></i> 
+                Calea către baza locală: C:/Users/user/Desktop/Manus/ai_finance_app/finance.db
+            </small>
+        </div>
+    </div>
+
+    <!-- Lista backup-urilor -->
+    <div class="card">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="fas fa-list"></i> Backup-uri Disponibile</h5>
+        </div>
+        <div class="card-body">
+            {% if backups %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-success">
+                        <tr>
+                            <th>Data Creării</th>
+                            <th>Descriere</th>
+                            <th>Mărime</th>
+                            <th>Acțiuni</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for backup in backups %}
+                        {% set is_auto_backup = 'backup_automat' in backup.filename.lower() %}
+                        <tr class="{% if is_auto_backup %}table-warning{% endif %}">
+                            <td>
+                                <i class="fas fa-calendar"></i>
+                                {% if backup.created_at %}
+                                    {{ backup.created_at.split('T')[0] }}
+                                    <br>
+                                    <small class="text-muted">{{ backup.created_at.split('T')[1][:8] }}</small>
+                                {% else %}
+                                    <span class="text-muted">Data necunoscută</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <strong>{{ backup.filename }}</strong>
+                                <br>
+                                {% if 'backup_automat' in backup.filename.lower() %}
+                                    <small class="text-warning fw-bold">
+                                        <i class="fas fa-shield-alt"></i> Backup automat
+                                    </small>
+                                {% else %}
+                                    <small class="text-muted">Backup manual</small>
+                                {% endif %}
+                                <br>
+                                <small class="text-info">
+                                    <i class="fas fa-table"></i> 
+                                    {% if backup.tables %}
+                                        {{ backup.tables.tranzactii }} tranzacții, {{ backup.tables.obiecte }} obiecte
+                                    {% else %}
+                                        0 tranzacții, 0 obiecte
+                                    {% endif %}
+                                </small>
+                                <br>
+                                {% if backup.gdrive_id %}
+                                    <small class="text-success">
+                                        <i class="fas fa-cloud"></i> Google Drive ✅
+                                    </small>
+                                {% else %}
+                                    <small class="text-muted">
+                                        <i class="fas fa-hdd"></i> Doar local
+                                    </small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge {% if is_auto_backup %}bg-warning text-dark{% else %}bg-info{% endif %}">
+                                    {% if backup.size %}
+                                        {{ (backup.size / 1024) | round(1) }} KB
+                                    {% else %}
+                                        0 KB
+                                    {% endif %}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <form method="POST" style="display: inline;" onsubmit="return confirm('Ești sigur că vrei să restaurezi din acest backup? Această acțiune va suprascrie datele actuale.')">
+                                        <input type="hidden" name="action" value="restore">
+                                        <input type="hidden" name="backup_file" value="{{ backup.filename }}">
+                                        <button type="submit" class="btn btn-warning btn-sm" title="Restaurează">
+                                            <i class="fas fa-undo"></i>
+                                        </button>
+                                    </form>
+                                    
+                                    <form method="POST" style="display: inline;" onsubmit="return confirm('Ești sigur că vrei să ștergi acest backup?')">
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="backup_file" value="{{ backup.filename }}">
+                                        <button type="submit" class="btn btn-danger btn-sm" title="Șterge">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-4">
+                <i class="fas fa-database fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">Nu există backup-uri</h5>
+                <p class="text-muted">Creează primul backup pentru a păstra datele în siguranță.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Informații despre backup -->
+    <div class="card mt-4">
+        <div class="card-header bg-info text-white">
+            <h6 class="mb-0"><i class="fas fa-info-circle"></i> Informații</h6>
+        </div>
+        <div class="card-body">
+            <ul class="list-unstyled mb-0">
+                <li><i class="fas fa-check text-success"></i> Backup-urile conțin toate tranzacțiile și obiectele</li>
+                <li><i class="fas fa-check text-success"></i> Restaurarea va suprascrie datele actuale</li>
+                <li><i class="fas fa-check text-success"></i> Se creează automat un backup înainte de restaurare</li>
+                <li><i class="fas fa-check text-success"></i> Backup-urile sunt salvate în directorul 'backups'</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 

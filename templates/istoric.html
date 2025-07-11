@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <title>Istoric Modificări</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <a href="/" class="btn btn-outline-secondary">⬅ Înapoi</a>
+        <h2>Istoric tranzacții</h2>
+        <div class="text-muted">
+            <small>Pagina {{ pagina_curenta }} din {{ total_pagini }} ({{ total_tranzactii }} tranzacții)</small>
+        </div>
+    </div>
+    
+    {% if error %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    
+    <!-- Secțiunea pentru ștergere multiplă -->
+    <div class="alert alert-info mb-3" id="selection-info" style="display: none;">
+        <div class="d-flex justify-content-between align-items-center">
+            <span id="selected-count">0 tranzacții selectate</span>
+            <button type="button" class="btn btn-danger btn-sm" id="delete-selected" onclick="deleteSelected()">
+                <i class="fas fa-trash"></i> Șterge selectate
+            </button>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header bg-dark text-white">Toate tranzacțiile (istoric)</div>
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>
+                            <input type="checkbox" id="select-all" class="form-check-input">
+                        </th>
+                        <th>Data</th>
+                        <th>Suma</th>
+                        <th>Comentariu</th>
+                        <th>Operator</th>
+                        <th>Tip</th>
+                        <th>Obiect</th>
+                        <th>Persoană</th>
+                        <th>Categorie</th>
+                        <th>Acțiuni</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in tranzactii %}
+                    <tr class="{% if row['tip'] == 'cheltuiala' %}table-danger{% elif row['tip'] == 'venit' %}table-primary{% endif %}">
+                        <td>
+                            {% if row['operator'] == user %}
+                                <input type="checkbox" class="form-check-input tranzactie-checkbox" value="{{ row['id'] }}">
+                            {% else %}
+                                <input type="checkbox" class="form-check-input" disabled>
+                            {% endif %}
+                        </td>
+                        <td>{{ row['data'] }}</td>
+                        <td>{{ row['suma'] }}</td>
+                        <td>{{ row['comentariu'] }}</td>
+                        <td>{{ row['operator'] }}</td>
+                        <td>{{ row['tip'] }}</td>
+                        <td>{{ row['obiect'] }}</td>
+                        <td>{{ row['persoana'] }}</td>
+                        <td>{{ row['categorie'] }}</td>
+                        <td>
+                            {% if row['operator'] == user %}
+                                <form method="POST" action="/sterge-istoric/{{ row['id'] }}?page={{ pagina_curenta }}" style="display: inline;" onsubmit="return confirm('Ești sigur că vrei să ștergi această tranzacție?')">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Șterge">
+                                        🗑️
+                                    </button>
+                                </form>
+                                <a href="/editare-istoric/{{ row['id'] }}?page={{ pagina_curenta }}" class="btn btn-sm btn-outline-primary" style="display: inline;" title="Modifică">
+                                    ✏️
+                                </a>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Paginare -->
+    {% if total_pagini > 1 %}
+    <nav aria-label="Navigare pagini istoric" class="mt-4">
+        <ul class="pagination justify-content-center">
+            <!-- Butonul Pagina Anterioară -->
+            <li class="page-item {% if pagina_curenta == 1 %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('istoric', page=pagina_curenta - 1) }}">Anterior</a>
+            </li>
+
+            <!-- Linkurile către pagini -->
+            {% for page_num in range(1, total_pagini + 1) %}
+                {% if page_num == pagina_curenta %}
+                    <li class="page-item active"><a class="page-link" href="#">{{ page_num }}</a></li>
+                {% elif page_num <= 5 or page_num > total_pagini - 5 or (page_num >= pagina_curenta - 2 and page_num <= pagina_curenta + 2) %}
+                    <li class="page-item"><a class="page-link" href="{{ url_for('istoric', page=page_num) }}">{{ page_num }}</a></li>
+                {% elif page_num == 6 and pagina_curenta > 8 %}
+                    <li class="page-item disabled"><a class="page-link" href="#">...</a></li>
+                {% elif page_num == total_pagini - 5 and pagina_curenta < total_pagini - 7 %}
+                    <li class="page-item disabled"><a class="page-link" href="#">...</a></li>
+                {% endif %}
+            {% endfor %}
+
+            <!-- Butonul Pagina Următoare -->
+            <li class="page-item {% if pagina_curenta == total_pagini %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('istoric', page=pagina_curenta + 1) }}">Următor</a>
+            </li>
+        </ul>
+    </nav>
+    {% endif %}
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- JavaScript pentru selectare și ștergere multiplă -->
+    <script>
+        // Funcția pentru selectarea/deselectarea tuturor
+        document.getElementById('select-all').addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.tranzactie-checkbox:not(:disabled)');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+            });
+            updateSelectionInfo();
+        });
+
+        // Funcția pentru actualizarea informațiilor de selecție
+        function updateSelectionInfo() {
+            const checkboxes = document.querySelectorAll('.tranzactie-checkbox:checked');
+            const count = checkboxes.length;
+            const infoDiv = document.getElementById('selection-info');
+            const countSpan = document.getElementById('selected-count');
+            
+            if (count > 0) {
+                infoDiv.style.display = 'block';
+                countSpan.textContent = count + ' tranzacții selectate';
+            } else {
+                infoDiv.style.display = 'none';
+            }
+        }
+
+        // Adaugă event listener pentru fiecare checkbox individual
+        document.querySelectorAll('.tranzactie-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                updateSelectionInfo();
+                
+                // Verifică dacă toate checkbox-urile sunt selectate
+                const allCheckboxes = document.querySelectorAll('.tranzactie-checkbox:not(:disabled)');
+                const checkedCheckboxes = document.querySelectorAll('.tranzactie-checkbox:checked');
+                const selectAllCheckbox = document.getElementById('select-all');
+                
+                if (checkedCheckboxes.length === allCheckboxes.length && allCheckboxes.length > 0) {
+                    selectAllCheckbox.checked = true;
+                } else {
+                    selectAllCheckbox.checked = false;
+                }
+            });
+        });
+
+        // Funcția pentru ștergerea tranzacțiilor selectate
+        function deleteSelected() {
+            const checkboxes = document.querySelectorAll('.tranzactie-checkbox:checked');
+            if (checkboxes.length === 0) {
+                alert('Nu ai selectat nicio tranzacție!');
+                return;
+            }
+
+            if (!confirm(`Ești sigur că vrei să ștergi ${checkboxes.length} tranzacții?`)) {
+                return;
+            }
+
+            const ids = Array.from(checkboxes).map(cb => cb.value);
+            
+            // Trimite cererea de ștergere
+            fetch('/sterge-multiple', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ids: ids})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Șterse cu succes ${data.deleted_count} tranzacții!`);
+                    // Reîncarcă pagina curentă din istoric
+                    const currentPage = new URLSearchParams(window.location.search).get('page') || 1;
+                    window.location.href = `/istoric?page=${currentPage}`;
+                } else {
+                    alert('Eroare la ștergere: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Eroare la ștergere: ' + error);
+            });
+        }
+    </script>
+</body>
+</html> 

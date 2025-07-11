@@ -1,0 +1,20 @@
+# Configurare Google Drive
+google_drive:
+  client_secrets_file: "client_secrets.json"
+  token_file: "gdrive_token.json"
+  folder_name: "AI Finance App Backups"
+  access_type: "offline"
+  approval_prompt: "force"
+
+# Configurare backup
+backup:
+  local_dir: "backups"
+  auto_backup_interval: 60  # secunde
+  max_backups: 50
+  upload_to_gdrive: true
+
+# Configurare aplicație
+app:
+  debug: false
+  host: "0.0.0.0"
+  port: 5000 

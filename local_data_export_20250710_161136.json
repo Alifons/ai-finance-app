@@ -1,0 +1,74 @@
+{
+  "tranzactii": [
+    {
+      "id": 82,
+      "data": "2025-07-10",
+      "suma": 42500.0,
+      "comentariu": "Decontare Calin",
+      "operator": "victor",
+      "tip": "venit",
+      "obiect": "necunoscut",
+      "persoana": "calin",
+      "categorie": "alte cheltuieli"
+    },
+    {
+      "id": 83,
+      "data": "2025-07-10",
+      "suma": 42500.0,
+      "comentariu": "Transfer către valerian: ",
+      "operator": "victor",
+      "tip": "cheltuiala",
+      "obiect": "transfer",
+      "persoana": "valerian",
+      "categorie": "transfer"
+    },
+    {
+      "id": 84,
+      "data": "2025-07-10",
+      "suma": 42500.0,
+      "comentariu": "Transfer de la victor: ",
+      "operator": "valerian",
+      "tip": "venit",
+      "obiect": "transfer",
+      "persoana": "victor",
+      "categorie": "transfer"
+    },
+    {
+      "id": 85,
+      "data": "2025-07-10",
+      "suma": 20000.0,
+      "comentariu": "Șalariu Dima Foxi",
+      "operator": "victor",
+      "tip": "cheltuiala",
+      "obiect": "foxi",
+      "persoana": "necunoscut",
+      "categorie": "alte cheltuieli"
+    }
+  ],
+  "obiecte": [
+    {
+      "id": 2,
+      "nume": "doina 2"
+    },
+    {
+      "id": 5,
+      "nume": "foxi"
+    },
+    {
+      "id": 1,
+      "nume": "gara de sud"
+    },
+    {
+      "id": 4,
+      "nume": "hincesti"
+    },
+    {
+      "id": 6,
+      "nume": "oficiu"
+    }
+  ],
+  "export_date": "2025-07-10T16:11:36.176986",
+  "total_tranzactii": 4,
+  "total_obiecte": 5,
+  "source": "local_export"
+}

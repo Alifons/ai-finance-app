@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: ai-finance-app
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: PORT
+        value: 10000
+      - key: RENDER
+        value: true
+      - key: PERSIST_DATA
+        value: true
+      - key: GOOGLE_DRIVE_ENABLED
+        value: true 
