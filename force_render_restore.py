@@ -4,13 +4,13 @@ Script pentru forțarea restaurarei datelor pe Render
 """
 
 import os
+import sys
 import shutil
-import sqlite3
 from datetime import datetime
 
-def force_render_restore():
-    """Forțează restaurarea datelor pe Render din Google Drive"""
-    print("🔄 Forțare restaurare date pe Render...")
+def force_restore_on_render():
+    """Forțează restaurarea datelor pe Render"""
+    print("🚀 FORȚARE RESTAURARE PE RENDER")
     print("=" * 50)
     
     # Verifică dacă sunt pe Render
@@ -20,109 +20,117 @@ def force_render_restore():
         print("⚠️ Acest script este destinat doar pentru Render")
         return False
     
-    # 1. Verifică starea inițială
-    print("1️⃣ Verificare starea inițială:")
-    if os.path.exists('finance.db'):
-        conn = sqlite3.connect('finance.db')
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM tranzactii")
-        initial_count = cursor.fetchone()[0]
-        conn.close()
-        print(f"   📊 Baza de date are {initial_count} tranzacții")
-    else:
-        print("   ❌ Baza de date nu există")
-        initial_count = 0
-    
-    # 2. Salvează o copie de siguranță
-    if os.path.exists('finance.db'):
-        backup_name = f"finance_backup_before_force_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
-        shutil.copy2('finance.db', backup_name)
-        print(f"   💾 Copie de siguranță salvată: {backup_name}")
-    
-    # 3. Forțează restaurarea din Google Drive
-    print("\n2️⃣ Forțare restaurare din Google Drive:")
+    print("✅ Detectat mediul Render.com")
     
     try:
-        from app import restore_from_google_drive, init_db
+        # Importă funcțiile necesare
+        from app import restore_from_latest_backup, DATABASE
+        from auto_backup import get_backup_system
         
-        # Inițializează baza de date (va forța restaurarea)
-        print("   🔧 Inițializare baza de date cu restaurare forțată...")
-        init_db()
+        print("🔄 Forțez restaurarea din Google Drive...")
         
-        # Verifică rezultatul
-        if os.path.exists('finance.db'):
-            conn = sqlite3.connect('finance.db')
+        # Forțează restaurarea
+        success, message = restore_from_latest_backup()
+        
+        if success:
+            print(f"✅ Restaurare reușită: {message}")
+            
+            # Verifică datele restaurate
+            import sqlite3
+            conn = sqlite3.connect(DATABASE)
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM tranzactii")
-            restored_count = cursor.fetchone()[0]
+            tranzactii_count = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM obiecte")
+            obiecte_count = cursor.fetchone()[0]
             conn.close()
             
-            print(f"   📊 Restaurare completă: {restored_count} tranzacții")
+            print(f"📊 Date restaurate:")
+            print(f"   - Tranzacții: {tranzactii_count}")
+            print(f"   - Obiecte: {obiecte_count}")
             
-            if restored_count > initial_count:
-                print(f"   📈 Îmbunătățire: {restored_count - initial_count} tranzacții noi restaurate")
-            elif restored_count == initial_count:
-                print(f"   ✅ Restaurare completă: toate {restored_count} tranzacțiile sunt prezente")
-            else:
-                print(f"   ⚠️ Restaurare parțială: {restored_count} din {initial_count} tranzacții")
-                
             return True
         else:
-            print("   ❌ Baza de date nu există după restaurare")
+            print(f"❌ Restaurare eșuată: {message}")
             return False
             
     except Exception as e:
-        print(f"   ❌ Eroare la restaurare: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Eroare la restaurare: {e}")
         return False
-    
-    # 4. Rezumat
-    print("\n3️⃣ Rezumat:")
-    print("   🎯 Restaurarea forțată pe Render completă")
-    print("   📊 Verifică dacă datele sunt actualizate")
-    print("   🔄 Pentru a testa din nou, rulează acest script din nou")
 
-def test_backup_after_restore():
-    """Testează backup-ul după restaurare"""
-    print("\n🔄 Testare backup după restaurare...")
+def create_backup_before_restore():
+    """Creează un backup înainte de restaurare"""
+    print("\n📦 Creare backup înainte de restaurare...")
     
     try:
-        from auto_backup import get_backup_system
-        backup_system = get_backup_system()
+        from app import create_backup, DATABASE
         
-        # Creează un backup nou
-        backup_filename = backup_system.create_backup(upload_to_gdrive_flag=True)
-        print(f"   ✅ Backup nou creat: {backup_filename}")
+        # Creează backup
+        backup_filename = create_backup(is_auto_backup=True)
+        print(f"✅ Backup creat: {backup_filename}")
         
         return True
-        
     except Exception as e:
-        print(f"   ❌ Eroare la testarea backup-ului: {e}")
+        print(f"⚠️ Eroare la crearea backup-ului: {e}")
+        return False
+
+def test_google_drive_connection():
+    """Testează conexiunea la Google Drive"""
+    print("\n🔄 Testare conexiune Google Drive...")
+    
+    try:
+        from auto_backup import gdrive_auth
+        
+        drive = gdrive_auth()
+        
+        if drive:
+            print("✅ Conexiune la Google Drive reușită!")
+            
+            # Testează listarea fișierelor
+            file_list = drive.ListFile({'q': "trashed=false"}).GetList()
+            print(f"📁 Fișiere găsite pe Google Drive: {len(file_list)}")
+            
+            return True
+        else:
+            print("❌ Nu s-a putut conecta la Google Drive")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Eroare la testarea Google Drive: {e}")
         return False
 
 def main():
     """Funcția principală"""
-    print("🧪 FORȚARE RESTAURARE RENDER")
+    print("🔧 SCRIPT FORȚARE RESTAURARE RENDER")
     print("=" * 60)
     
-    # Forțează restaurarea
-    restore_success = force_render_restore()
+    # Testează conexiunea Google Drive
+    gdrive_ok = test_google_drive_connection()
     
-    # Testează backup-ul după restaurare
-    backup_success = test_backup_after_restore()
+    if not gdrive_ok:
+        print("⚠️ Google Drive nu este disponibil")
+        print("💡 Verifică variabilele de mediu pe Render")
+        return
+    
+    # Creează backup înainte de restaurare
+    backup_ok = create_backup_before_restore()
+    
+    # Forțează restaurarea
+    restore_ok = force_restore_on_render()
     
     print("\n" + "=" * 60)
     print("📋 REZUMAT:")
-    print(f"   Restaurare: {'✅ Reușită' if restore_success else '❌ Eșuată'}")
-    print(f"   Backup: {'✅ Reușit' if backup_success else '❌ Eșuat'}")
+    print(f"   Google Drive: {'✅ OK' if gdrive_ok else '❌ Problema'}")
+    print(f"   Backup pre-restaurare: {'✅ OK' if backup_ok else '❌ Problema'}")
+    print(f"   Restaurare forțată: {'✅ OK' if restore_ok else '❌ Problema'}")
     
-    if restore_success and backup_success:
-        print("\n🎉 Restaurarea și backup-ul funcționează perfect!")
-        print("✅ Render va păstra datele între restart-uri")
+    if restore_ok:
+        print("\n🎉 Restaurarea a fost reușită!")
+        print("✅ Datele au fost restaurate din Google Drive")
+        print("✅ Aplicația va funcționa cu datele actualizate")
     else:
-        print("\n⚠️ Există probleme cu restaurarea sau backup-ul")
-        print("💡 Verifică configurarea Google Drive pe Render")
+        print("\n⚠️ Restaurarea a eșuat")
+        print("💡 Verifică log-urile pentru detalii")
 
 if __name__ == "__main__":
     main() 

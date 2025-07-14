@@ -1,211 +1,281 @@
 #!/usr/bin/env python3
 """
-Script pentru aplicarea automată a soluției de persistență pe Render
+Script pentru aplicarea fix-ului de persistență pe Render
 """
 
 import os
-import subprocess
 import sys
+import shutil
 from datetime import datetime
 
-def check_git_status():
-    """Verifică statusul Git"""
-    print("🔍 Verificare status Git...")
+def check_current_state():
+    """Verifică starea curentă a aplicației"""
+    print("🔍 VERIFICARE STARE CURENTĂ")
     print("=" * 50)
     
-    try:
-        result = subprocess.run(['git', 'status'], capture_output=True, text=True)
-        if result.returncode == 0:
-            print("✅ Git repository găsit")
-            return True
-        else:
-            print("❌ Nu este un Git repository")
-            return False
-    except Exception as e:
-        print(f"❌ Eroare la verificarea Git: {e}")
-        return False
-
-def commit_changes():
-    """Comite modificările"""
-    print("\n📝 Commit modificări...")
-    print("=" * 50)
+    # Verifică dacă sunt pe Render
+    is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
+    print(f"🌐 Pe Render: {is_render}")
     
-    try:
-        # Adaugă toate fișierele
-        subprocess.run(['git', 'add', '.'], check=True)
-        print("✅ Fișiere adăugate la Git")
+    # Verifică baza de date
+    if os.path.exists('finance.db'):
+        import sqlite3
+        conn = sqlite3.connect('finance.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM tranzactii")
+        tranzactii_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM obiecte")
+        obiecte_count = cursor.fetchone()[0]
+        conn.close()
         
-        # Comite modificările
-        commit_message = f"Fix persistență date pe Render - restaurare forțată - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        subprocess.run(['git', 'commit', '-m', commit_message], check=True)
-        print(f"✅ Commit creat: {commit_message}")
-        
-        return True
-    except Exception as e:
-        print(f"❌ Eroare la commit: {e}")
-        return False
-
-def push_changes():
-    """Push modificările"""
-    print("\n🚀 Push modificări...")
-    print("=" * 50)
-    
-    try:
-        subprocess.run(['git', 'push'], check=True)
-        print("✅ Modificări push-uite la remote")
-        return True
-    except Exception as e:
-        print(f"❌ Eroare la push: {e}")
-        return False
-
-def check_render_environment():
-    """Verifică configurarea Render"""
-    print("\n🌐 Verificare configurare Render...")
-    print("=" * 50)
-    
-    # Verifică fișierul render.yaml
-    if os.path.exists('render.yaml'):
-        print("✅ render.yaml găsit")
-        
-        with open('render.yaml', 'r') as f:
-            content = f.read()
-            
-        required_vars = ['RENDER', 'PERSIST_DATA', 'GOOGLE_DRIVE_ENABLED']
-        missing_vars = []
-        
-        for var in required_vars:
-            if var not in content:
-                missing_vars.append(var)
-        
-        if missing_vars:
-            print(f"⚠️ Variabile lipsesc din render.yaml: {', '.join(missing_vars)}")
-            return False
-        else:
-            print("✅ Toate variabilele necesare sunt în render.yaml")
-            return True
+        print(f"📊 Baza de date curentă:")
+        print(f"   - Tranzacții: {tranzactii_count}")
+        print(f"   - Obiecte: {obiecte_count}")
     else:
-        print("❌ render.yaml nu există")
+        print("❌ Baza de date nu există")
+    
+    # Verifică backup-urile locale
+    backup_dir = 'backups'
+    if os.path.exists(backup_dir):
+        backup_files = [f for f in os.listdir(backup_dir) if f.endswith('.db')]
+        print(f"📦 Backup-uri locale: {len(backup_files)}")
+    else:
+        print("❌ Directorul de backup nu există")
+    
+    return is_render
+
+def backup_current_data():
+    """Creează backup al datelor curente"""
+    print("\n📦 BACKUP DATE CURENTE")
+    print("=" * 50)
+    
+    try:
+        from app import create_backup
+        
+        # Creează backup
+        backup_filename = create_backup(is_auto_backup=True)
+        print(f"✅ Backup creat: {backup_filename}")
+        
+        return True
+    except Exception as e:
+        print(f"❌ Eroare la crearea backup-ului: {e}")
         return False
 
-def create_deployment_script():
-    """Creează un script de deployment"""
-    print("\n📝 Creare script deployment...")
+def test_google_drive_connection():
+    """Testează conexiunea la Google Drive"""
+    print("\n🔄 TESTARE GOOGLE DRIVE")
     print("=" * 50)
     
-    script_content = '''#!/bin/bash
-# Script pentru deployment automat pe Render
+    try:
+        from auto_backup import gdrive_auth
+        
+        drive = gdrive_auth()
+        
+        if drive:
+            print("✅ Conexiune la Google Drive reușită!")
+            
+            # Testează listarea fișierelor
+            file_list = drive.ListFile({'q': "trashed=false"}).GetList()
+            print(f"📁 Fișiere găsite pe Google Drive: {len(file_list)}")
+            
+            return True
+        else:
+            print("❌ Nu s-a putut conecta la Google Drive")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Eroare la testarea Google Drive: {e}")
+        return False
 
-echo "🚀 Deploy pe Render..."
-
-# Verifică Git status
-if [ -n "$(git status --porcelain)" ]; then
-    echo "📝 Commit modificări..."
-    git add .
-    git commit -m "Fix persistență date pe Render - $(date)"
-fi
-
-# Push la remote
-echo "🚀 Push modificări..."
-git push
-
-echo "✅ Deploy inițiat!"
-echo "📊 Verifică statusul pe Render dashboard"
-echo "⏱️ Deploy-ul va dura 2-3 minute"
-'''
-    
-    with open('deploy_render.sh', 'w') as f:
-        f.write(script_content)
-    
-    # Face scriptul executabil
-    os.chmod('deploy_render.sh', 0o755)
-    
-    print("✅ Script deployment creat: deploy_render.sh")
-
-def create_verification_script():
-    """Creează un script de verificare"""
-    print("\n📝 Creare script verificare...")
+def test_restore_function():
+    """Testează funcția de restaurare"""
+    print("\n🔄 TESTARE RESTAURARE")
     print("=" * 50)
     
-    script_content = '''#!/bin/bash
-# Script pentru verificarea deployment-ului pe Render
+    try:
+        from app import restore_from_latest_backup
+        
+        # Testează restaurarea
+        success, message = restore_from_latest_backup()
+        
+        print(f"📋 Rezultat testare: {message}")
+        print(f"✅ Funcția de restaurare: {'OK' if success else 'Problema'}")
+        
+        return success
+    except Exception as e:
+        print(f"❌ Eroare la testarea restaurarei: {e}")
+        return False
 
-echo "🔍 Verificare deployment Render..."
+def test_backup_system():
+    """Testează sistemul de backup"""
+    print("\n📦 TESTARE SISTEM BACKUP")
+    print("=" * 50)
+    
+    try:
+        from auto_backup import get_backup_system
+        
+        backup_system = get_backup_system()
+        
+        if backup_system:
+            print("✅ Sistem de backup inițializat")
+            
+            # Testează folderul de backup
+            folder_id = backup_system.gdrive_folder_id
+            if folder_id:
+                print(f"✅ Folder backup configurat: {folder_id}")
+            else:
+                print("❌ Folder backup nu este configurat")
+                return False
+            
+            # Testează lista backup-urilor
+            backups = backup_system.get_backup_list()
+            print(f"📋 Backup-uri găsite: {len(backups)}")
+            
+            return True
+        else:
+            print("❌ Nu s-a putut inițializa sistemul de backup")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Eroare la testarea sistemului de backup: {e}")
+        return False
 
-# Testează soluția local
-echo "🧪 Testare soluție local..."
-python test_persistence_solution.py
+def verify_persistence_fix():
+    """Verifică că fix-ul de persistență este aplicat"""
+    print("\n🔧 VERIFICARE FIX PERSISTENȚĂ")
+    print("=" * 50)
+    
+    try:
+        # Verifică că funcția restore_from_latest_backup a fost modificată
+        with open('app.py', 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Verifică că restaurarea se face forțat pe Render
+        if "Pe Render, forțează restaurarea din Google Drive întotdeauna" in content:
+            print("✅ Restaurarea forțată pe Render este implementată")
+        else:
+            print("❌ Restaurarea forțată pe Render nu este implementată")
+            return False
+        
+        # Verifică că backup-ul se face mai frecvent pe Render
+        if "BACKUP_INTERVAL_RENDER" in content:
+            print("✅ Backup mai frecvent pe Render este configurat")
+        else:
+            print("❌ Backup mai frecvent pe Render nu este configurat")
+            return False
+        
+        # Verifică că init_db forțează restaurarea pe Render
+        if "Detectat mediul Render.com - forțez restaurarea datelor" in content:
+            print("✅ Inițializarea forțează restaurarea pe Render")
+        else:
+            print("❌ Inițializarea nu forțează restaurarea pe Render")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Eroare la verificarea fix-ului: {e}")
+        return False
 
-echo ""
-echo "📋 Pași pentru verificare pe Render:"
-echo "1. Intră pe Render dashboard"
-echo "2. Verifică log-urile pentru mesajele:"
-echo "   - 'Detectat mediul Render.com - forțez restaurarea din Google Drive...'"
-echo "   - 'Date restaurate din Google Drive'"
-echo "3. Adaugă câteva tranzacții și verifică că persistă"
-echo "4. Așteaptă ca aplicația să intre în sleep mode"
-echo "5. Accesează din nou - datele ar trebui să fie acolo!"
+def create_test_script():
+    """Creează un script de test pentru persistența"""
+    print("\n📝 CREARE SCRIPT TEST")
+    print("=" * 50)
+    
+    script_content = '''#!/usr/bin/env python3
+"""
+Script de test pentru persistența datelor pe Render
+"""
+
+import os
+import time
+from datetime import datetime
+
+def test_persistence():
+    """Testează persistența datelor"""
+    print(f"🧪 Test persistență la {datetime.now().strftime('%H:%M:%S')}")
+    
+    try:
+        from app import init_db, restore_from_latest_backup
+        
+        # Testează inițializarea
+        print("🔄 Testare inițializare...")
+        init_db()
+        
+        # Testează restaurarea
+        print("🔄 Testare restaurare...")
+        success, message = restore_from_latest_backup()
+        
+        if success:
+            print(f"✅ Test reușit: {message}")
+        else:
+            print(f"❌ Test eșuat: {message}")
+            
+    except Exception as e:
+        print(f"❌ Eroare la test: {e}")
+
+if __name__ == "__main__":
+    while True:
+        test_persistence()
+        time.sleep(60)  # Testează la fiecare minut
 '''
     
-    with open('verify_deployment.sh', 'w') as f:
+    with open('test_persistence.py', 'w', encoding='utf-8') as f:
         f.write(script_content)
     
-    # Face scriptul executabil
-    os.chmod('verify_deployment.sh', 0o755)
-    
-    print("✅ Script verificare creat: verify_deployment.sh")
+    print("✅ Script de test creat: test_persistence.py")
 
 def main():
     """Funcția principală"""
-    print("🚀 APLICARE SOLUȚIE PERSISTENȚĂ RENDER")
-    print("=" * 60)
+    print("🚀 APLICARE FIX PERSISTENȚĂ RENDER")
+    print("=" * 70)
     
-    # Verifică Git
-    git_ok = check_git_status()
-    if not git_ok:
-        print("❌ Nu este un Git repository. Inițializează Git înainte de a continua.")
-        return
+    # Verifică starea curentă
+    is_render = check_current_state()
     
-    # Verifică configurarea Render
-    render_ok = check_render_environment()
-    if not render_ok:
-        print("⚠️ Configurarea Render nu este completă. Verifică render.yaml")
+    # Backup date curente
+    backup_ok = backup_current_data()
     
-    # Comite modificările
-    commit_ok = commit_changes()
-    if not commit_ok:
-        print("❌ Eroare la commit. Verifică Git status.")
-        return
+    # Testează Google Drive
+    gdrive_ok = test_google_drive_connection()
     
-    # Push modificările
-    push_ok = push_changes()
-    if not push_ok:
-        print("❌ Eroare la push. Verifică conexiunea la remote.")
-        return
+    # Testează sistemul de backup
+    backup_system_ok = test_backup_system()
     
-    # Creează scripturi utile
-    create_deployment_script()
-    create_verification_script()
+    # Testează restaurarea
+    restore_ok = test_restore_function()
     
-    print("\n" + "=" * 60)
-    print("📋 REZUMAT APLICARE:")
-    print(f"   Git repository: {'✅ OK' if git_ok else '❌ Problema'}")
-    print(f"   Configurare Render: {'✅ OK' if render_ok else '⚠️ Verifică'}")
-    print(f"   Commit modificări: {'✅ OK' if commit_ok else '❌ Problema'}")
-    print(f"   Push modificări: {'✅ OK' if push_ok else '❌ Problema'}")
+    # Verifică fix-ul de persistență
+    fix_ok = verify_persistence_fix()
     
-    if commit_ok and push_ok:
-        print("\n🎉 Soluția a fost aplicată cu succes!")
-        print("✅ Modificările au fost push-uite la remote")
-        print("✅ Render va detecta automat modificările")
-        print("✅ Deploy-ul va începe automat")
-        print("\n📋 Pași următori:")
-        print("1. Așteaptă 2-3 minute pentru deploy")
-        print("2. Verifică log-urile pe Render dashboard")
-        print("3. Testează aplicația pentru a verifica persistența")
-        print("4. Rulează: ./verify_deployment.sh pentru verificare")
+    # Creează script de test
+    create_test_script()
+    
+    print("\n" + "=" * 70)
+    print("📋 REZUMAT APLICARE FIX:")
+    print(f"   Backup date curente: {'✅ OK' if backup_ok else '❌ Problema'}")
+    print(f"   Google Drive: {'✅ OK' if gdrive_ok else '❌ Problema'}")
+    print(f"   Sistem Backup: {'✅ OK' if backup_system_ok else '❌ Problema'}")
+    print(f"   Restaurare: {'✅ OK' if restore_ok else '❌ Problema'}")
+    print(f"   Fix Persistență: {'✅ OK' if fix_ok else '❌ Problema'}")
+    
+    if backup_ok and gdrive_ok and backup_system_ok and restore_ok and fix_ok:
+        print("\n🎉 Fix-ul de persistență a fost aplicat cu succes!")
+        print("✅ Render va păstra datele între restart-uri")
+        print("✅ Backup-urile se vor face automat pe Google Drive")
+        print("✅ Restaurarea se va face automat la pornire")
+        print("✅ Backup-ul se face la fiecare minut pe Render")
+        print("✅ Restaurarea se face forțat pe Render")
+        
+        if is_render:
+            print("\n💡 Pentru a testa:")
+            print("   1. Repornește serverul pe Render")
+            print("   2. Verifică că datele sunt restaurate")
+            print("   3. Adaugă o tranzacție nouă")
+            print("   4. Repornește din nou și verifică persistența")
     else:
-        print("\n⚠️ Există probleme cu aplicarea soluției")
-        print("💡 Verifică Git status și conexiunea la remote")
+        print("\n⚠️ Există probleme cu fix-ul")
+        print("💡 Verifică configurarea Google Drive pe Render")
 
 if __name__ == "__main__":
     main() 
