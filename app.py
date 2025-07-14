@@ -350,6 +350,16 @@ def get_db():
     init_db()
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
+    
+    # Pe Render, forțează salvarea la fiecare operație
+    is_render = is_render_environment()
+    if is_render:
+        # Activează WAL mode pentru performanță și siguranță
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA cache_size=10000")
+        conn.execute("PRAGMA temp_store=MEMORY")
+    
     return conn
 
 def get_db_hash():
@@ -383,6 +393,29 @@ def reset_backup_tracking():
         print(f"📊 Tracking backup resetat: {last_transaction_count} tranzacții")
     except Exception as e:
         print(f"⚠️ Eroare la resetarea tracking-ului: {e}")
+
+def force_save_on_render():
+    """Forțează salvarea datelor pe Render"""
+    is_render = is_render_environment()
+    if is_render:
+        try:
+            # Forțează backup după fiecare operație pe Render
+            from app import create_backup
+            backup_filename = create_backup(is_auto_backup=True)
+            print(f"💾 Backup forțat pe Render: {backup_filename}")
+            
+            # Forțează sincronizarea cu Google Drive dacă este disponibil
+            if AUTO_BACKUP_AVAILABLE:
+                try:
+                    from auto_backup import get_backup_system
+                    backup_system = get_backup_system()
+                    backup_system.create_backup(upload_to_gdrive_flag=True)
+                    print("☁️ Backup Google Drive forțat pe Render")
+                except Exception as e:
+                    print(f"⚠️ Eroare la backup Google Drive: {e}")
+                    
+        except Exception as e:
+            print(f"⚠️ Eroare la forțarea backup-ului pe Render: {e}")
 
 def auto_backup():
     """Backup automat în background cu Google Drive - la 12 ore pe local, 1 minut pe Render"""
@@ -846,6 +879,9 @@ def index():
             ''', (data, suma, comentariu, operator, tip, obiect, persoana, categorie))
             conn.commit()
             
+            # Pe Render, forțează salvarea după fiecare tranzacție
+            force_save_on_render()
+            
             # Generează un nou CSRF token după fiecare tranzacție
             session['csrf_token'] = secrets.token_hex(16)
             
@@ -914,6 +950,10 @@ def editare(id):
             WHERE id=?
         ''', (data, suma, comentariu, operator, tip, obiect, persoana, categorie, id))
         conn.commit()
+        
+        # Pe Render, forțează salvarea după fiecare editare
+        force_save_on_render()
+        
         return redirect(url_for('index'))
 
     return render_template("editare.html", tranzactie=tranzactie)
@@ -949,6 +989,9 @@ def editare_istoric(id):
         ''', (data, suma, comentariu, operator, tip, obiect, persoana, categorie, id))
         conn.commit()
         
+        # Pe Render, forțează salvarea după fiecare editare
+        force_save_on_render()
+        
         # Redirecționează înapoi în istoric cu pagina curentă
         pagina = request.form.get('page', request.args.get('page', 1, type=int), type=int)
         return redirect(url_for('istoric', page=pagina))
@@ -974,6 +1017,10 @@ def sterge(id):
     
     c.execute("DELETE FROM tranzactii WHERE id=?", (id,))
     conn.commit()
+    
+    # Pe Render, forțează salvarea după fiecare ștergere
+    force_save_on_render()
+    
     return redirect(url_for('index'))
 
 @app.route('/sterge-istoric/<int:id>', methods=['POST', 'GET'])
@@ -996,6 +1043,9 @@ def sterge_istoric(id):
     
     c.execute("DELETE FROM tranzactii WHERE id=?", (id,))
     conn.commit()
+    
+    # Pe Render, forțează salvarea după fiecare ștergere
+    force_save_on_render()
     
     # Redirecționează înapoi în istoric cu pagina curentă
     pagina = request.args.get('page', 1, type=int)
@@ -1031,6 +1081,9 @@ def sterge_multiple():
         c.execute(f"DELETE FROM tranzactii WHERE id IN ({placeholders_permise})", tranzactii_permise)
         conn.commit()
         
+        # Pe Render, forțează salvarea după ștergerea multiplă
+        force_save_on_render()
+        
         deleted_count = c.rowcount
         
         return {
@@ -1062,6 +1115,10 @@ def obiecte():
                 
                 c.execute("INSERT INTO obiecte (nume) VALUES (?)", (nume,))
                 conn.commit()
+                
+                # Pe Render, forțează salvarea după adăugarea obiectului
+                force_save_on_render()
+                
                 return render_template("obiecte.html", obiecte=c.execute("SELECT * FROM obiecte").fetchall(), 
                                     success=f"Obiectul '{nume}' a fost adăugat cu succes!")
             except Exception as e:
