@@ -59,12 +59,40 @@ def get_backup_dir():
         os.makedirs(backup_dir)
     return backup_dir
 
+def is_render_environment():
+    """Detectează dacă aplicația rulează pe Render"""
+    # Multiple metode de detectare pentru Render
+    render_indicators = [
+        os.environ.get('RENDER', False),
+        'render' in os.environ.get('HOSTNAME', '').lower(),
+        'render' in os.environ.get('RENDER_EXTERNAL_HOSTNAME', '').lower(),
+        'render' in os.environ.get('RENDER_SERVICE_NAME', '').lower(),
+        os.environ.get('RENDER_SERVICE_NAME') is not None,
+        os.environ.get('RENDER_EXTERNAL_HOSTNAME') is not None,
+        os.environ.get('RENDER_SERVICE_ID') is not None,
+        os.environ.get('RENDER_INSTANCE_ID') is not None
+    ]
+    
+    is_render = any(render_indicators)
+    
+    # Debug info
+    print(f"🔍 Detectare mediu Render:")
+    print(f"   RENDER: {os.environ.get('RENDER', 'Not set')}")
+    print(f"   HOSTNAME: {os.environ.get('HOSTNAME', 'Not set')}")
+    print(f"   RENDER_EXTERNAL_HOSTNAME: {os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'Not set')}")
+    print(f"   RENDER_SERVICE_NAME: {os.environ.get('RENDER_SERVICE_NAME', 'Not set')}")
+    print(f"   RENDER_SERVICE_ID: {os.environ.get('RENDER_SERVICE_ID', 'Not set')}")
+    print(f"   RENDER_INSTANCE_ID: {os.environ.get('RENDER_INSTANCE_ID', 'Not set')}")
+    print(f"   Rezultat detectare: {is_render}")
+    
+    return is_render
+
 def restore_from_latest_backup():
     """Restaurează datele din cel mai recent backup (local sau Google Drive)"""
     backup_dir = get_backup_dir()
     
     # Verifică dacă sunt pe Render
-    is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
+    is_render = is_render_environment()
     
     # Pe Render, forțează restaurarea din Google Drive întotdeauna
     if is_render and AUTO_BACKUP_AVAILABLE:
@@ -262,7 +290,7 @@ def init_db():
     conn.close()
     
     # Verifică dacă sunt pe Render
-    is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
+    is_render = is_render_environment()
     
     if is_render:
         print("🔄 Detectat mediul Render.com - forțez restaurarea datelor...")
@@ -364,7 +392,7 @@ def auto_backup():
         try:
             if SYNC_ENABLED:
                 # Verifică dacă sunt pe Render
-                is_render = os.environ.get('RENDER', False) or 'render' in os.environ.get('HOSTNAME', '').lower()
+                is_render = is_render_environment()
                 
                 # Alege intervalul de backup în funcție de mediu
                 backup_interval = BACKUP_INTERVAL_RENDER if is_render else BACKUP_INTERVAL
